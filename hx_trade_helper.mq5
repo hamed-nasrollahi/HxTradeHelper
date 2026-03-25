@@ -6,12 +6,9 @@
 #property copyright "Copyright 2023, Hamed Nasrollahi."
 #property link      "https://github.com/hamed-nasrollahi"
 #property description "nasrollahi.hamed@gmail.com"
-#property version   "2.00"
+#property version   "1.1"
 #property strict
-//#property indicator_chart_window
-//#property indicator_buffers 3
-//#property indicator_plots 3
-//#property indicator_color1  clrWhite
+
 
 #include "DialogHx.mqh"
 #include <Controls\Button.mqh>
@@ -92,7 +89,7 @@ input int Width_Session = 1;
 
 DialogHx  AppWindow;
 CButton  btnJournal, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB, 
-btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2;
+btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
 yesterdayEnable = false, atrEnable = true, lastWeekMapEnable = false;
@@ -104,7 +101,10 @@ datetime GMTOffset;
 
 CArrayObj *tradeElements= NULL; // Dynamic list to hold CTradeElement instances
 int ma20Handle=INVALID_HANDLE, ma60Handle=INVALID_HANDLE, ma200Handle=INVALID_HANDLE;
-bool ma20Enable = false, ma60Enable = false, ma200Enable = false;
+bool ma20Enable = false, ma60Enable = false, ma200Enable = false, statEnable = false;
+
+int dialog_tab=0;
+int winTrades = 0, loseTrades=0;
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
@@ -120,32 +120,11 @@ int OnInit()
    int chartWidth = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0) - 120;
    //--- create application dialog
    CleanAppWindows();
-   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+110,560))
+   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+110,650))
       return(INIT_FAILED);
       
-   if(!CreateButton(btnJournal, "btnJournal", "Journal",10,10,90,30) ||
-   !CreateButton(btnYesterday, "btnYesterday", "Yesterday",10,40,90,60) ||
-   !CreateButton(btnDayBefore, "btnDayBefore", "Day Before",10,70,90,90) ||
-   !CreateButton(btnLastWeek, "btnLastWeek", "Last Week",10,100,90,120) ||
-   !CreateButton(btnWeeklyMap, "btnWeeklyMap", "Week Map",10,130,90,150) ||
-   !CreateButton(btnLevel1, "btnLevel1", "L1",10,160,45,180) ||
-   !CreateButton(btnLevel2, "btnLevel2", "L2",55,160,90,180) ||
-   !CreateButton(btnLevel3, "btnLevel3", "L3",10,190,45,210) ||
-   !CreateButton(btnATR, "btnATR", "ATR",55,190,90,210) ||
-   !CreateButton(btnSessions, "btnSessions", "Sessions",10,220,90,240) ||
-   !CreateButton(btnDOB, "btnDOB", "DOB",10,250,45,270) ||
-   !CreateButton(btnH4OB, "btnH4OB", "H4OB",55,250,90,270) ||
-   !CreateButton(btnH1OB, "btnH1OB", "H1OB",10,280,45,300) ||
-   !CreateButton(btnSROB, "btnSROB", "SROB",55,280,90,300) ||
-   !CreateButton(btnSell, "btnSell", "Sell",10,310,45,330) ||
-   !CreateButton(btnBuy, "btnBuy", "Buy",55,310,90,330) ||
-   !CreateButton(btnMA20, "btnMA20", "M20",10,340,45,360) ||
-   !CreateButton(btnCLR, "btnCLR", "CLR",55,340,90,360) ||
-   !CreateButton(btnMA60, "btnMA60", "M60",10,370,45,390) ||
-   !CreateButton(btnMA200, "btnMA200", "M200",55,370,90,390) ||
-   !CreateButton(btnFib2, "btnFib2", "Fib2",55,400,90,420) ||
-   !CreateButton(btnFib1, "btnFib1", "Fib1",10,400,45,420))
-      return(false);
+   
+   PopulateTabs();
       
    //--- run application
    AppWindow.Run();
@@ -158,6 +137,48 @@ int OnInit()
    //EventSetTimer(1);
    
    return(INIT_SUCCEEDED);
+}
+
+void PopulateTabs()
+{
+  //hide all buttons
+  switch(dialog_tab)
+  {  
+   case 1:
+     
+    break;
+   default:
+    CreateButton(btnJournal, "btnJournal", "Journal",10,10,90,30);
+    CreateButton(btnYesterday, "btnYesterday", "Yesterday",10,40,90,60);
+    CreateButton(btnDayBefore, "btnDayBefore", "Day Before",10,70,90,90);
+    CreateButton(btnLastWeek, "btnLastWeek", "Last Week",10,100,90,120);
+    CreateButton(btnWeeklyMap, "btnWeeklyMap", "Week Map",10,130,90,150);
+    CreateButton(btnLevel1, "btnLevel1", "L1",10,160,45,180);
+    CreateButton(btnLevel2, "btnLevel2", "L2",55,160,90,180);
+    CreateButton(btnLevel3, "btnLevel3", "L3",10,190,45,210);
+    CreateButton(btnATR, "btnATR", "ATR",55,190,90,210);
+    CreateButton(btnSessions, "btnSessions", "Sessions",10,220,90,240);
+    CreateButton(btnDOB, "btnDOB", "DOB",10,250,45,270);
+    CreateButton(btnH4OB, "btnH4OB", "H4OB",55,250,90,270);
+    CreateButton(btnH1OB, "btnH1OB", "H1OB",10,280,45,300);
+    CreateButton(btnSROB, "btnSROB", "SROB",55,280,90,300);
+    CreateButton(btnSell, "btnSell", "Sell",10,310,45,330);
+    CreateButton(btnBuy, "btnBuy", "Buy",55,310,90,330);
+    CreateButton(btnMA20, "btnMA20", "M20",10,340,45,360);
+    CreateButton(btnCLR, "btnCLR", "CLR",55,340,90,360);
+    CreateButton(btnMA60, "btnMA60", "M60",10,370,45,390);
+    CreateButton(btnMA200, "btnMA200", "M200",55,370,90,390);
+    CreateButton(btnFib2, "btnFib2", "Fib2",55,400,90,420);
+    CreateButton(btnFib1, "btnFib1", "Fib1",10,400,45,420) ;   
+    CreateButton(btnWB, "btnWB", "W-B",55,430,90,450) ; 
+    CreateButton(btnLB, "btnLB", "L-B",10,430,45,450) ; 
+    CreateButton(btnWS, "btnWS", "W-S",55,460,90,480) ; 
+    CreateButton(btnLS, "btnLS", "L-S",10,460,45,480) ; 
+    CreateButton(btnExp, "btnExp", "Exp",55,490,90,510) ; 
+    CreateButton(btnEnbl, "btnEnbl", "enbl",10,490,45,510) ;    
+    break;
+  }
+
 }
 
 //+------------------------------------------------------------------+
@@ -194,6 +215,10 @@ void OnTimera()
       InitSessionsIndicator();
    }   
    //EventSetTimer(1);
+}
+
+void DrawStats()
+{
 }
 
 //+------------------------------------------------------------------+
@@ -328,6 +353,27 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       {
          atrEnable = ! atrEnable;
          RefreshLines();
+      }
+      else if(sparam == "btnEnbl")
+      {
+        statEnable = !statEnable;
+        DrawStats();
+      }
+      else if(sparam == "btnWB")
+      {
+        winTrades ++;
+      }
+      else if(sparam == "btnLB")
+      {
+      }
+      else if(sparam == "btnWS")
+      {
+      }
+      else if(sparam == "btnLS")
+      {
+      }
+      else if(sparam == "btnExp")
+      {
       }
       else if(sparam == "btnSessions")
       {
