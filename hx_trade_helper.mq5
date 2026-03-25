@@ -86,10 +86,12 @@ input color Color_NewYorkPreSession = clrBlueViolet;
 input ENUM_LINE_STYLE Style_Session = STYLE_DOT;
 input int Width_Session = 1;
 
+input double tradeRisk = 1.0;  // Risk per trade (R)
+
 
 DialogHx  AppWindow;
 CButton  btnJournal, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB, 
-btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl;
+btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
 yesterdayEnable = false, atrEnable = true, lastWeekMapEnable = false;
@@ -120,7 +122,7 @@ int OnInit()
    int chartWidth = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0) - 120;
    //--- create application dialog
    CleanAppWindows();
-   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+110,650))
+   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+110,680))
       return(INIT_FAILED);
       
    
@@ -174,8 +176,9 @@ void PopulateTabs()
     CreateButton(btnLB, "btnLB", "L-B",10,430,45,450) ; 
     CreateButton(btnWS, "btnWS", "W-S",55,460,90,480) ; 
     CreateButton(btnLS, "btnLS", "L-S",10,460,45,480) ; 
-    CreateButton(btnExp, "btnExp", "Exp",55,490,90,510) ; 
-    CreateButton(btnEnbl, "btnEnbl", "enbl",10,490,45,510) ;    
+    CreateButton(btnExp, "btnExp", "Exp",55,490,90,510) ;
+    CreateButton(btnEnbl, "btnEnbl", "enbl",10,490,45,510) ;
+    CreateButton(btnReCalc, "btnReCalc", "ReCalc",10,520,90,540) ;
     break;
   }
 
@@ -219,6 +222,34 @@ void OnTimera()
 
 void DrawStats()
 {
+   string objName = "StatsLabel";
+
+   if(!statEnable)
+   {
+      ObjectDelete(0, objName);
+      return;
+   }
+
+   int totalTrades = winTrades + loseTrades;
+   double winPct    = (totalTrades > 0) ? (winTrades * 100.0 / totalTrades) : 0.0;
+   double totalSum  = tradeRisk * winTrades - loseTrades;
+
+   color sumColor = (totalSum >= 0) ? clrLimeGreen : clrRed;
+
+   string statsText = StringFormat("W:%d  L:%d  |  Win%%: %.1f%%  |  Sum: %.0fR",
+                                   winTrades, loseTrades, winPct, totalSum);
+
+   if(ObjectFind(0, objName) == -1)
+   {
+      ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, objName, OBJPROP_CORNER,    CORNER_RIGHT_UPPER);
+      ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, 450);
+      ObjectSetInteger(0, objName, OBJPROP_YDISTANCE, 20);
+      ObjectSetInteger(0, objName, OBJPROP_FONTSIZE,  12);
+      ObjectSetInteger(0, objName, OBJPROP_SELECTABLE, false);
+   }
+   ObjectSetString (0, objName, OBJPROP_TEXT,  statsText);
+   ObjectSetInteger(0, objName, OBJPROP_COLOR, sumColor);
 }
 
 //+------------------------------------------------------------------+
@@ -362,18 +393,129 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       else if(sparam == "btnWB")
       {
         winTrades ++;
+        long firstVisibleBar, visibleBars;
+        ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
+        ChartGetInteger(0, CHART_VISIBLE_BARS, 0, visibleBars);
+        long middleBar = firstVisibleBar - (visibleBars / 2);
+
+        datetime time_start = iTime(NULL, 0, middleBar + 5);
+        datetime time_end = iTime(NULL, 0, middleBar);
+        double price_top = iHigh(NULL, 0, middleBar);
+        double price_bottom = iLow(NULL, 0, middleBar);
+        CreateFibo("WB_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrDarkGreen, time_start, price_top, time_end, price_bottom);
       }
       else if(sparam == "btnLB")
       {
+        loseTrades ++;
+        long firstVisibleBar, visibleBars;
+        ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
+        ChartGetInteger(0, CHART_VISIBLE_BARS, 0, visibleBars);
+        long middleBar = firstVisibleBar - (visibleBars / 2);
+
+        datetime time_start = iTime(NULL, 0, middleBar + 5);
+        datetime time_end = iTime(NULL, 0, middleBar);
+        double price_top = iHigh(NULL, 0, middleBar);
+        double price_bottom = iLow(NULL, 0, middleBar);
+        CreateFibo("LB_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrMaroon, time_start, price_top, time_end, price_bottom);
       }
       else if(sparam == "btnWS")
       {
+        long firstVisibleBar, visibleBars;
+        ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
+        ChartGetInteger(0, CHART_VISIBLE_BARS, 0, visibleBars);
+        long middleBar = firstVisibleBar - (visibleBars / 2);
+
+        datetime time_start = iTime(NULL, 0, middleBar + 5);
+        datetime time_end = iTime(NULL, 0, middleBar);
+        double price_top = iHigh(NULL, 0, middleBar);
+        double price_bottom = iLow(NULL, 0, middleBar);
+        CreateFibo("WS_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrDarkGreen, time_start, price_bottom, time_end, price_top);
       }
       else if(sparam == "btnLS")
       {
+        loseTrades ++;
+        long firstVisibleBar, visibleBars;
+        ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
+        ChartGetInteger(0, CHART_VISIBLE_BARS, 0, visibleBars);
+        long middleBar = firstVisibleBar - (visibleBars / 2);
+
+        datetime time_start = iTime(NULL, 0, middleBar + 5);
+        datetime time_end = iTime(NULL, 0, middleBar);
+        double price_top = iHigh(NULL, 0, middleBar);
+        double price_bottom = iLow(NULL, 0, middleBar);
+        CreateFibo("LS_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrMaroon, time_start, price_bottom, time_end, price_top);
       }
       else if(sparam == "btnExp")
       {
+         // Collect all trade fibo names
+         string tradeNames[];
+         int total = ObjectsTotal(0, 0, OBJ_FIBO);
+         for(int i = 0; i < total; i++)
+         {
+            string name = ObjectName(0, i, 0, OBJ_FIBO);
+            string pfx = StringSubstr(name, 0, 3);
+            if(pfx == "WB_" || pfx == "WS_" || pfx == "LB_" || pfx == "LS_")
+            {
+               int sz = ArraySize(tradeNames);
+               ArrayResize(tradeNames, sz + 1);
+               tradeNames[sz] = name;
+            }
+         }
+
+         // Sort by embedded datetime string (lexicographic = chronological)
+         int n = ArraySize(tradeNames);
+         for(int a = 0; a < n - 1; a++)
+            for(int b = a + 1; b < n; b++)
+               if(StringSubstr(tradeNames[a], 3) > StringSubstr(tradeNames[b], 3))
+               {
+                  string tmp = tradeNames[a];
+                  tradeNames[a] = tradeNames[b];
+                  tradeNames[b] = tmp;
+               }
+
+         // Write CSV
+         FolderCreate("TradesHistory");
+         string fileName = "TradesHistory\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
+         int fh = FileOpen(fileName, FILE_WRITE | FILE_ANSI | FILE_CSV, ',');
+         if(fh == INVALID_HANDLE)
+         {
+            Print("btnExp: failed to open file ", fileName, "  error=", GetLastError());
+         }
+         else
+         {
+            FileWrite(fh, "Trade #", "Date", "Time", "Type", "Win/Lose", "Duration (min)", "Strategy", "correctTrade", "5m bias", "1h bias", "desc");
+            for(int i = 0; i < n; i++)
+            {
+               string pfx      = StringSubstr(tradeNames[i], 0, 3);
+               string dtStr    = StringSubstr(tradeNames[i], 3);          // "2024.01.15 14:30:00"
+               string datePart = StringSubstr(dtStr, 0, 10);              // "2024.01.15"
+               string timePart = StringSubstr(dtStr, 11);                 // "14:30:00"
+               string type     = (pfx == "WB_" || pfx == "LB_") ? "Buy"  : "Sell";
+               string result   = (pfx == "WB_" || pfx == "WS_") ? "Win"  : "Lose";
+               datetime t1     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 0);
+               datetime t2     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 1);
+               int durationMin = (int)(MathAbs((double)(t2 - t1)) / 60);
+               FileWrite(fh, i + 1, datePart, timePart, type, result, durationMin, "", "", "", "", "");
+            }
+            FileClose(fh);
+            Print("Trades exported to: ", TerminalInfoString(TERMINAL_DATA_PATH), "\\MQL5\\Files\\", fileName);
+            MessageBox("Exported " + IntegerToString(n) + " trade(s) to:\nMQL5\\Files\\" + fileName, "Export Complete", MB_OK);
+         }
+      }
+      else if(sparam == "btnReCalc")
+      {
+         winTrades  = 0;
+         loseTrades = 0;
+         int total = ObjectsTotal(0, 0, OBJ_FIBO);
+         for(int i = 0; i < total; i++)
+         {
+            string name = ObjectName(0, i, 0, OBJ_FIBO);
+            if(StringFind(name, "WB_") == 0 || StringFind(name, "WS_") == 0)
+               winTrades++;
+            else if(StringFind(name, "LB_") == 0 || StringFind(name, "LS_") == 0)
+               loseTrades++;
+         }
+         DrawStats();
       }
       else if(sparam == "btnSessions")
       {
@@ -531,6 +673,10 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          ObjectsDeleteAll(0, "SR-OB_", 0, OBJ_RECTANGLE);
          ObjectsDeleteAll(0, "Fib1_", 0, OBJ_FIBO);
          ObjectsDeleteAll(0, "Fib2_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "WB_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "WS_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "LB_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "LS_", 0, OBJ_FIBO);
       }
       else if(sparam == "btnFib1")
       {
