@@ -87,7 +87,6 @@ input ENUM_LINE_STYLE Style_Session = STYLE_DOT;
 input int Width_Session = 1;
 
 input double tradeRisk   = 1.0;              // Risk per trade (R)
-input string DbApiUrl    = "http://localhost/mql5/insert_trades.php";  // MySQL REST API endpoint
 
 
 DialogHx  AppWindow;
@@ -502,8 +501,10 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             FileClose(fh);
             Print("Trades exported to: ", TerminalInfoString(TERMINAL_DATA_PATH), "\\MQL5\\Files\\", fileName);
 
-            // Build JSON and POST to MySQL API
-            if(StringLen(DbApiUrl) > 0 && n > 0)
+            // Write JSON sidecar for the Python importer
+            string jsonFile = "TradesHistory\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".json";
+            int jh = FileOpen(jsonFile, FILE_WRITE | FILE_ANSI | FILE_TXT);
+            if(jh != INVALID_HANDLE)
             {
                string symbol = Symbol();
                string json = "{\"symbol\":\"" + symbol + "\",\"trades\":[";
@@ -520,23 +521,17 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
                   int dur2         = (int)(MathAbs((double)(t2b - t1b)) / 60);
                   if(i > 0) json += ",";
                   json += "{\"trade_number\":" + IntegerToString(i + 1)
-                        + ",\"trade_date\":\""   + datePart2 + "\""
-                        + ",\"trade_time\":\""   + timePart2 + "\""
-                        + ",\"type\":\""         + type2     + "\""
-                        + ",\"result\":\""       + result2   + "\""
-                        + ",\"duration_min\":"   + IntegerToString(dur2)
+                        + ",\"trade_date\":\""  + datePart2 + "\""
+                        + ",\"trade_time\":\""  + timePart2 + "\""
+                        + ",\"type\":\""        + type2     + "\""
+                        + ",\"result\":\""      + result2   + "\""
+                        + ",\"duration_min\":"  + IntegerToString(dur2)
                         + "}";
                }
                json += "]}";
-
-               uchar postData[], httpResult[];
-               string respHeaders;
-               StringToCharArray(json, postData, 0, StringLen(json));
-               int httpCode = WebRequest("POST", DbApiUrl, "Content-Type: application/json\r\n", 5000, postData, httpResult, respHeaders);
-               if(httpCode == 200)
-                  Print("DB export OK: ", CharArrayToString(httpResult));
-               else
-                  Print("DB export failed. HTTP=", httpCode, "  error=", GetLastError());
+               FileWriteString(jh, json);
+               FileClose(jh);
+               Print("JSON sidecar written: ", jsonFile);
             }
 
             MessageBox("Exported " + IntegerToString(n) + " trade(s) to:\nMQL5\\Files\\" + fileName, "Export Complete", MB_OK);
