@@ -86,12 +86,13 @@ input color Color_NewYorkPreSession = clrBlueViolet;
 input ENUM_LINE_STYLE Style_Session = STYLE_DOT;
 input int Width_Session = 1;
 
-input double tradeRisk = 1.0;  // Risk per trade (R)
+input double tradeRisk   = 1.0;              // Risk per trade (R)
+input string DbApiUrl    = "http://localhost/mql5/insert_trades.php";  // MySQL REST API endpoint
 
 
 DialogHx  AppWindow;
 CButton  btnJournal, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB, 
-btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc;
+btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc, btnReset;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
 yesterdayEnable = false, atrEnable = true, lastWeekMapEnable = false;
@@ -178,7 +179,8 @@ void PopulateTabs()
     CreateButton(btnLS, "btnLS", "L-S",10,460,45,480) ; 
     CreateButton(btnExp, "btnExp", "Exp",55,490,90,510) ;
     CreateButton(btnEnbl, "btnEnbl", "enbl",10,490,45,510) ;
-    CreateButton(btnReCalc, "btnReCalc", "ReCalc",10,520,90,540) ;
+    CreateButton(btnReset,  "btnReset",  "Rst", 10,520,45,540) ;
+    CreateButton(btnReCalc, "btnReCalc", "CLC",55,520,90,540) ;
     break;
   }
 
@@ -499,8 +501,56 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             }
             FileClose(fh);
             Print("Trades exported to: ", TerminalInfoString(TERMINAL_DATA_PATH), "\\MQL5\\Files\\", fileName);
+
+            // Build JSON and POST to MySQL API
+            if(StringLen(DbApiUrl) > 0 && n > 0)
+            {
+               string symbol = Symbol();
+               string json = "{\"symbol\":\"" + symbol + "\",\"trades\":[";
+               for(int i = 0; i < n; i++)
+               {
+                  string pfx2      = StringSubstr(tradeNames[i], 0, 3);
+                  string dtStr2    = StringSubstr(tradeNames[i], 3);
+                  string datePart2 = StringSubstr(dtStr2, 0, 10);
+                  string timePart2 = StringSubstr(dtStr2, 11);
+                  string type2     = (pfx2 == "WB_" || pfx2 == "LB_") ? "Buy"  : "Sell";
+                  string result2   = (pfx2 == "WB_" || pfx2 == "WS_") ? "Win"  : "Lose";
+                  datetime t1b     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 0);
+                  datetime t2b     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 1);
+                  int dur2         = (int)(MathAbs((double)(t2b - t1b)) / 60);
+                  if(i > 0) json += ",";
+                  json += "{\"trade_number\":" + IntegerToString(i + 1)
+                        + ",\"trade_date\":\""   + datePart2 + "\""
+                        + ",\"trade_time\":\""   + timePart2 + "\""
+                        + ",\"type\":\""         + type2     + "\""
+                        + ",\"result\":\""       + result2   + "\""
+                        + ",\"duration_min\":"   + IntegerToString(dur2)
+                        + "}";
+               }
+               json += "]}";
+
+               uchar postData[], httpResult[];
+               string respHeaders;
+               StringToCharArray(json, postData, 0, StringLen(json));
+               int httpCode = WebRequest("POST", DbApiUrl, "Content-Type: application/json\r\n", 5000, postData, httpResult, respHeaders);
+               if(httpCode == 200)
+                  Print("DB export OK: ", CharArrayToString(httpResult));
+               else
+                  Print("DB export failed. HTTP=", httpCode, "  error=", GetLastError());
+            }
+
             MessageBox("Exported " + IntegerToString(n) + " trade(s) to:\nMQL5\\Files\\" + fileName, "Export Complete", MB_OK);
          }
+      }
+      else if(sparam == "btnReset")
+      {
+         ObjectsDeleteAll(0, "WB_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "WS_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "LB_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "LS_", 0, OBJ_FIBO);
+         winTrades  = 0;
+         loseTrades = 0;
+         DrawStats();
       }
       else if(sparam == "btnReCalc")
       {
