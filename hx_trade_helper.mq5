@@ -302,7 +302,7 @@ int OnCalculate(const int rates_total,
 //+------------------------------------------------------------------+
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
-   datetime current_time = TimeCurrent(); // Get the current server time
+   datetime current_time = TimeLocal(); // Get the current system time
    if(id == CHARTEVENT_OBJECT_CHANGE || id == CHARTEVENT_OBJECT_DRAG)
    {
       if (StringFind(sparam, "SELL_") == 0 || StringFind(sparam, "BUY_") == 0)
