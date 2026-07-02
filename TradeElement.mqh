@@ -197,7 +197,7 @@ public:
 
       string stopLossText = StringFormat("%d(%.2f$)", (int)stopLossPips, riskMoney);
       string takeProfitText = StringFormat("%d(%.2f$)", (int)takeProfitPips, rewardMoney);
-      string riskRewardText = StringFormat("R/R=1/%.1f", takeProfitPips / stopLossPips);
+      string riskRewardText = StringFormat("R/R=1/%.1f", stopLossPips != 0 ? takeProfitPips / stopLossPips : 0.0);
 
       ObjectSetString(chartId, redLabel, OBJPROP_TEXT, stopLossText);
       ObjectSetString(chartId, greenLabel, OBJPROP_TEXT, takeProfitText);
