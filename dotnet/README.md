@@ -6,6 +6,17 @@ DLLs. This project is compiled with **.NET 8 Native AOT**, which produces a
 plain native Win32 DLL with C exports — MetaTrader loads it like any C++
 library, no .NET runtime hosting or installation involved.
 
+## Database setup
+
+`schema.sql` in this folder creates everything the trade pipeline stores
+data in: the `hx_trades` database, the `trades` table (upsert key
+`account + position_id`) and the `hx` application user the API connects
+with. Edit the placeholder password, then run it once as root:
+
+```
+mysql -u root -p < schema.sql
+```
+
 ## Build
 
 Requirements (build machine only, the DLL itself is self-contained):

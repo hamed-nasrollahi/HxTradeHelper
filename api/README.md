@@ -5,10 +5,11 @@ Small companion service that stores the journal exports produced by the
 
 ## Setup
 
-1. Create the database and table:
+1. Create the database, table and application user (the script lives next
+   to the .NET uploader):
 
    ```
-   mysql -u root -p < schema.sql
+   mysql -u root -p < ../dotnet/schema.sql
    ```
 
 2. Install dependencies (Python 3.9+):
