@@ -18,6 +18,11 @@
 // Base folder for storing screenshots
 input string JournalBasePath = "TradesHistory";
 
+// Trade API upload (MariaDB backend, see api/README.md)
+input string ApiUrl = "http://127.0.0.1:8000/api/trades"; // Trade API endpoint
+input string ApiKey = "";                                 // Trade API key (X-Api-Key header)
+input bool UploadToApi = true;                            // Upload today's trades to the API
+
 
 input bool showCandleTime = false;
 input bool showSessions = false;
@@ -1031,10 +1036,106 @@ void ExportTodaysTrades()
    }
 
    string csvFile = WriteTradesCsv(trades, dayFolder, currentDate);
+   string json = BuildTradesJson(trades);
+   WriteTradesJson(json, dayFolder, currentDate);
    int shots = CaptureTradeScreenshots(trades, dayFolder);
 
-   MessageBox(StringFormat("Exported %d trade(s) to:\nMQL5\\Files\\%s\n%d screenshot(s) captured.",
-              total, csvFile, shots), "Journal Export", MB_OK);
+   string uploadNote = "";
+   if(UploadToApi)
+      uploadNote = UploadTradesToApi(json) ? "\nUploaded to trade API." : "\nAPI upload failed - see Experts log.";
+
+   MessageBox(StringFormat("Exported %d trade(s) to:\nMQL5\\Files\\%s\n%d screenshot(s) captured.%s",
+              total, csvFile, shots, uploadNote), "Journal Export", MB_OK);
+}
+
+//+------------------------------------------------------------------+
+//| Build the JSON payload the trade API expects                     |
+//+------------------------------------------------------------------+
+string BuildTradesJson(JournalTrade &trades[])
+{
+   string json = "{\"account\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))
+               + ",\"export_time\":\"" + TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS) + "\""
+               + ",\"trades\":[";
+   for(int i = 0; i < ArraySize(trades); i++)
+   {
+      int digits = (int)SymbolInfoInteger(trades[i].symbol, SYMBOL_DIGITS);
+      if(i > 0)
+         json += ",";
+      json += "{\"position_id\":" + IntegerToString(trades[i].positionId)
+            + ",\"symbol\":\""    + trades[i].symbol + "\""
+            + ",\"type\":\""      + trades[i].type + "\""
+            + ",\"result\":\""    + FormatTradeResult(trades[i]) + "\""
+            + ",\"rr\":\""        + FormatTradeRR(trades[i]) + "\""
+            + ",\"entry_price\":" + DoubleToString(trades[i].entryPrice, digits)
+            + ",\"stop_loss\":"   + DoubleToString(trades[i].stopLoss, digits)
+            + ",\"take_profit\":" + DoubleToString(trades[i].takeProfit, digits)
+            + ",\"close_price\":" + DoubleToString(trades[i].closePrice, digits)
+            + ",\"profit\":"      + DoubleToString(trades[i].profit, 2)
+            + ",\"open_time\":\"" + TimeToString(trades[i].openTime, TIME_DATE | TIME_SECONDS) + "\""
+            + ",\"close_time\":\"" + (trades[i].isOpen ? "" : TimeToString(trades[i].closeTime, TIME_DATE | TIME_SECONDS)) + "\""
+            + ",\"is_open\":"     + (trades[i].isOpen ? "true" : "false")
+            + "}";
+   }
+   json += "]}";
+   return json;
+}
+
+//+------------------------------------------------------------------+
+//| Write the JSON payload next to the CSV (api/uploader.py input)   |
+//+------------------------------------------------------------------+
+void WriteTradesJson(const string json, const string dayFolder, const string currentDate)
+{
+   string fileName = dayFolder + "\\trades_" + currentDate + ".json";
+   int fh = FileOpen(fileName, FILE_WRITE | FILE_ANSI | FILE_TXT);
+   if(fh == INVALID_HANDLE)
+   {
+      Print("Journal export: failed to open file ", fileName, "  error=", GetLastError());
+      return;
+   }
+   FileWriteString(fh, json);
+   FileClose(fh);
+   Print("JSON export written: ", fileName);
+}
+
+//+------------------------------------------------------------------+
+//| POST the trades to the API. Indicators cannot call WebRequest,   |
+//| in that case the JSON file stays as input for api/uploader.py    |
+//+------------------------------------------------------------------+
+bool UploadTradesToApi(const string json)
+{
+   if(ApiUrl == "")
+      return false;
+
+   char post[];
+   int len = StringToCharArray(json, post, 0, WHOLE_ARRAY, CP_UTF8) - 1;
+   ArrayResize(post, len); // drop the terminating zero
+
+   string headers = "Content-Type: application/json\r\n";
+   if(ApiKey != "")
+      headers += "X-Api-Key: " + ApiKey + "\r\n";
+
+   char result[];
+   string resultHeaders;
+   ResetLastError();
+   int status = WebRequest("POST", ApiUrl, headers, 10000, post, result, resultHeaders);
+   if(status == -1)
+   {
+      int err = GetLastError();
+      if(err == 4014)
+         Print("API upload skipped: WebRequest is not allowed in indicators. Import the JSON with api/uploader.py instead.");
+      else
+         Print("API upload failed, error ", err, ". Make sure '", ApiUrl, "' is listed under Tools > Options > Expert Advisors > Allow WebRequest.");
+      return false;
+   }
+
+   string response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+   if(status >= 200 && status < 300)
+   {
+      Print("Trades uploaded to API: ", response);
+      return true;
+   }
+   Print("API returned HTTP ", status, ": ", response);
+   return false;
 }
 
 //+------------------------------------------------------------------+
