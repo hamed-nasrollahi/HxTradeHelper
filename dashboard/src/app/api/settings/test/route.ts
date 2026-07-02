@@ -8,6 +8,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const current = loadSettings();
   const candidate = {
+    ...current,
     host: String(body.host || "").trim() || current.host,
     port: Number(body.port) || current.port,
     database: String(body.database || "").trim() || current.database,

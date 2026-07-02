@@ -28,10 +28,10 @@ int GetLastResponse(string &buffer, int capacity);
 // Base folder for storing screenshots
 input string JournalBasePath = "TradesHistory";
 
-// Trade API upload (MariaDB backend, see api/README.md)
-input string ApiUrl = "http://127.0.0.1:8000/api/trades"; // Trade API endpoint
-input string ApiKey = "";                                 // Trade API key (X-Api-Key header)
-input bool UploadToApi = true;                            // Upload today's trades to the API
+// Journal upload to the dashboard (MariaDB backend, see dashboard/README.md)
+input string ApiUrl = "http://127.0.0.1:3000/api/import"; // Dashboard import endpoint
+input string ApiKey = "";                                 // Import API key (X-Api-Key header)
+input bool UploadToApi = true;                            // Upload today's trades to the dashboard
 
 
 input bool showCandleTime = false;

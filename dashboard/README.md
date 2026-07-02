@@ -1,10 +1,10 @@
 # HxTradeHelper Dashboard
 
-Analytics dashboard for the HxTradeHelper trade journal. Connects to the
-`hx_trades` MariaDB database that the journal exports feed, lets you define
-strategies and tag every trade with one, and computes statistics overall,
-per strategy, per month/week/weekday/hour/symbol/direction, or any
-combination of filters.
+Analytics dashboard for the HxTradeHelper trade journal. It receives the
+journal uploads from the MT5 indicator (`POST /api/import`), stores them in
+the `hx_trades` MariaDB database, lets you define strategies and tag every
+trade with one, and computes statistics overall, per strategy, per
+month/week/weekday/hour/symbol/direction, or any combination of filters.
 
 Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 
@@ -16,7 +16,7 @@ Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 | **Breakdown** | Group the same filtered stats by strategy, month, ISO week, symbol, day of week, hour of day, or direction — chart plus full table |
 | **Trades** | Filterable trade list; assign a strategy to each trade inline |
 | **Strategies** | Create/edit/delete strategies (name, description, color) with per-strategy quick stats |
-| **Settings** | MariaDB host/port/database/username/password with a test-connection button |
+| **Settings** | MariaDB host/port/database/username/password with a test-connection button, plus the journal import API key |
 
 Every page shares the same filter row (date range, symbol, strategy,
 direction), so any statistic can be combined — e.g. "win rate of the
@@ -33,10 +33,32 @@ This starts:
 
 - **db** — MariaDB 11 with the `hx_trades` database. On first start it runs
   `sql/db-init.sql` (base `trades` table) and `sql/dashboard.sql`
-  (strategies table + `strategy_id` column). Port 3306 is published so the
-  trade API / uploader can write into the same database.
+  (strategies table + `strategy_id` column). Port 3306 is published for
+  direct SQL access; the MT5 journal itself arrives over HTTP (below).
 - **dashboard** — this app on <http://localhost:3000>, pre-pointed at the
   `db` service.
+
+## Journal import endpoint
+
+The MT5 indicator uploads through `HxTradeUploader.dll` to:
+
+```
+POST /api/import
+Content-Type: application/json
+X-Api-Key: <Import API key from Settings, if set>
+
+{ "account": 1234567, "trades": [ { "position_id": ..., "symbol": "...",
+  "type": "Buy", "result": "Win", "rr": "1:2.50", "entry_price": ...,
+  "stop_loss": ..., "take_profit": ..., "close_price": ..., "profit": ...,
+  "open_time": "yyyy.mm.dd hh:mm:ss", "close_time": "...", "is_open": false } ] }
+```
+
+Set the indicator's `ApiUrl` input to
+`http://<dashboard-host>:3000/api/import` (and `ApiKey` to the import key
+if you configured one). Trades are upserted by `(account, position_id)`,
+so re-exporting the same day is safe: open trades update once they close,
+and strategy assignments made in the dashboard are never overwritten by a
+re-import.
 
 Data persists in the `db-data` volume; dashboard settings in `dashboard-data`.
 
@@ -76,6 +98,7 @@ initial defaults only:
 | `HX_DB_NAME` | `hx_trades` |
 | `HX_DB_USER` | `hx` |
 | `HX_DB_PASSWORD` | *(empty)* |
+| `HX_API_KEY` | *(empty)* — initial journal import key |
 | `DATA_DIR` | `/app/data` (where settings.json lives) |
 
 ## Local development

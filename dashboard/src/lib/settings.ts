@@ -7,6 +7,8 @@ export interface DbSettings {
   database: string;
   user: string;
   password: string;
+  /** X-Api-Key required on POST /api/import; empty = no auth */
+  importApiKey: string;
 }
 
 function dataDir(): string {
@@ -24,6 +26,7 @@ function envDefaults(): DbSettings {
     database: process.env.HX_DB_NAME || "hx_trades",
     user: process.env.HX_DB_USER || "hx",
     password: process.env.HX_DB_PASSWORD || "",
+    importApiKey: process.env.HX_API_KEY || "",
   };
 }
 

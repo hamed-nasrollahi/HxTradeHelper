@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS trades (
     KEY idx_symbol (symbol)
 ) ENGINE = InnoDB;
 
--- Application user for the trade API (matches the HX_DB_USER / HX_DB_PASSWORD
--- defaults in api/README.md). CHANGE THE PASSWORD.
+-- Application user for the dashboard (matches the HX_DB_USER / HX_DB_PASSWORD
+-- defaults in dashboard/README.md). CHANGE THE PASSWORD.
 CREATE USER IF NOT EXISTS 'hx'@'localhost' IDENTIFIED BY 'change-me';
 GRANT SELECT, INSERT, UPDATE ON hx_trades.trades TO 'hx'@'localhost';
 FLUSH PRIVILEGES;

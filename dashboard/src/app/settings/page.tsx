@@ -9,18 +9,35 @@ interface Form {
   database: string;
   user: string;
   password: string;
+  importApiKey: string;
 }
 
 export default function SettingsPage() {
-  const [form, setForm] = useState<Form>({ host: "", port: "3306", database: "", user: "", password: "" });
+  const [form, setForm] = useState<Form>({
+    host: "",
+    port: "3306",
+    database: "",
+    user: "",
+    password: "",
+    importApiKey: "",
+  });
   const [hasPassword, setHasPassword] = useState(false);
+  const [hasImportKey, setHasImportKey] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     getJSON("/api/settings").then((s: any) => {
-      setForm({ host: s.host, port: String(s.port), database: s.database, user: s.user, password: "" });
+      setForm({
+        host: s.host,
+        port: String(s.port),
+        database: s.database,
+        user: s.user,
+        password: "",
+        importApiKey: "",
+      });
       setHasPassword(s.hasPassword);
+      setHasImportKey(s.hasImportKey);
     });
   }, []);
 
@@ -44,7 +61,8 @@ export default function SettingsPage() {
       await sendJSON("/api/settings", "PUT", form);
       setStatus({ ok: true, message: "Settings saved." });
       if (form.password) setHasPassword(true);
-      setForm((f) => ({ ...f, password: "" }));
+      if (form.importApiKey) setHasImportKey(true);
+      setForm((f) => ({ ...f, password: "", importApiKey: "" }));
     } catch (e: any) {
       setStatus({ ok: false, message: e.message });
     } finally {
@@ -83,6 +101,19 @@ export default function SettingsPage() {
             "password",
             "password",
             hasPassword ? "•••••• (leave empty to keep current)" : ""
+          )}
+        </div>
+        <h2 className="mb-1 mt-6 text-sm font-medium">Journal import</h2>
+        <p className="mb-4 text-xs" style={{ color: "var(--ink-muted)" }}>
+          The MT5 indicator uploads to <code>POST /api/import</code>. When a key is set here, requests
+          must send it in the <code>X-Api-Key</code> header (the indicator&apos;s <code>ApiKey</code> input).
+        </p>
+        <div className="flex flex-col gap-3">
+          {field(
+            "Import API key",
+            "importApiKey",
+            "password",
+            hasImportKey ? "•••••• (leave empty to keep current)" : "empty = no key required"
           )}
         </div>
         <div className="mt-4 flex gap-2">
