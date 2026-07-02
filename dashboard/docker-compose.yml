@@ -1,0 +1,42 @@
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change-me-root}
+      MARIADB_DATABASE: hx_trades
+      MARIADB_USER: ${DB_USER:-hx}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-change-me}
+    ports:
+      - "3306:3306" # so the trade API / MT5 machine can reach it too
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./sql/db-init.sql:/docker-entrypoint-initdb.d/01-tables.sql:ro
+      - ./sql/dashboard.sql:/docker-entrypoint-initdb.d/02-dashboard.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  dashboard:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Defaults for the Settings page; can be changed there at runtime
+      HX_DB_HOST: db
+      HX_DB_PORT: "3306"
+      HX_DB_NAME: hx_trades
+      HX_DB_USER: ${DB_USER:-hx}
+      HX_DB_PASSWORD: ${DB_PASSWORD:-change-me}
+    volumes:
+      - dashboard-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  dashboard-data:

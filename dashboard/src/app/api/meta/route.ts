@@ -1,0 +1,24 @@
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    const symbols = await query<{ symbol: string }>(
+      "SELECT DISTINCT symbol FROM trades ORDER BY symbol"
+    );
+    let strategies: any[] = [];
+    try {
+      strategies = await query("SELECT id, name, color FROM strategies ORDER BY name");
+    } catch {
+      // strategies table not created yet - dashboard still works read-only
+    }
+    return NextResponse.json({
+      symbols: symbols.map((r) => r.symbol),
+      strategies,
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "query failed" }, { status: 500 });
+  }
+}

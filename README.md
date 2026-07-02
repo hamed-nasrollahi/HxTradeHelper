@@ -86,6 +86,8 @@ TradesHistory\
 | `dotnet/README.md` | DLL build/install details |
 | `api/` | FastAPI service that receives journal exports and upserts them into MariaDB |
 | `api/README.md` | API setup details |
+| `dashboard/` | Next.js analytics dashboard: strategy tagging, statistics, equity curve, Docker deployment |
+| `dashboard/README.md` | Dashboard setup details |
 
 ## Installation
 
