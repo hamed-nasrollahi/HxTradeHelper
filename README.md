@@ -144,7 +144,7 @@ Experts log).
 | `showCandleTime` / `showSessions` / `showSlipage` | `false` | Candle-close countdown, session timers, spread label (1-second timer starts only if one is enabled) |
 | `ShowNews` | `false` | Fetch the ForexFactory calendar and show the red/orange event countdown |
 | `NewsCurrencies` | *(empty)* | CSV currency filter for events; empty = the chart symbol's base and profit currencies |
-| `NewsWindowMinutes` | 60 | Countdown appears when the next event is within this window |
+| `NewsWindowMinutes` | 2 | Countdown appears when the next event is within this window |
 | `NewsDurationMinutes` | 15 | How long an event stays "LIVE" after its release time |
 | `Level1/2/3` | 1.25 / 2.50 / 5.00 | Round-number grid steps (price units) |
 | `ATR_Period` | 14 | Daily ATR period for the bands |

@@ -42,7 +42,7 @@ input bool showSlipage = false;
 // ForexFactory news (fetched through HxTradeUploader.dll)
 input bool ShowNews = false;              // Fetch ForexFactory calendar (orange + red events)
 input string NewsCurrencies = "";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
-input int NewsWindowMinutes = 60;         // Show countdown when the next event is within this window
+input int NewsWindowMinutes = 2;          // Show countdown when the next event is within this window
 input int NewsDurationMinutes = 15;       // How long an event counts as "in progress" after release
 input string NewsFeedUrl = "https://nfs.faireconomy.media/ff_calendar_thisweek.json";
 
