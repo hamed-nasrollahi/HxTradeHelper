@@ -15,9 +15,11 @@
 #include <Arrays\ArrayObj.mqh> // For dynamic object arrays
 #include "TradeElement.mqh"
 
-// .NET library (see dotnet/README.md): build HxTradeUploader.dll and put it
-// in MQL5\Libraries. Public static methods are imported as TradeUploader::...
+// Native library built with .NET 8 Native AOT (see dotnet/README.md):
+// publish HxTradeUploader.dll and put it in MQL5\Libraries
 #import "HxTradeUploader.dll"
+int UploadJson(string apiUrl, string apiKey, string json, int timeoutMs);
+int GetLastResponse(string &buffer, int capacity);
 #import
 
 // Base folder for storing screenshots
@@ -1112,8 +1114,12 @@ bool UploadTradesToApi(const string json)
    if(ApiUrl == "")
       return false;
 
-   int status = TradeUploader::UploadJson(ApiUrl, ApiKey, json, 10000);
-   string response = TradeUploader::GetLastResponse();
+   int status = UploadJson(ApiUrl, ApiKey, json, 10000);
+
+   string response;
+   StringInit(response, 8192);
+   int len = GetLastResponse(response, 8192);
+   response = StringSubstr(response, 0, len);
 
    if(status >= 200 && status < 300)
    {

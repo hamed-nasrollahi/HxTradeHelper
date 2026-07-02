@@ -1,18 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- MetaTrader 5 native .NET support only loads .NET Framework assemblies -->
-    <TargetFramework>net48</TargetFramework>
-    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>HxTradeUploader</AssemblyName>
     <RootNamespace></RootNamespace>
-    <LangVersion>7.3</LangVersion>
+    <!-- Native AOT: compile to a plain Win32 DLL with C exports that
+         MetaTrader loads like any native library (no runtime hosting) -->
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
-
-  <ItemGroup>
-    <!-- lets `dotnet build` work on machines without the .NET Framework targeting pack -->
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
-  </ItemGroup>
 
 </Project>
