@@ -8,7 +8,15 @@ using System.Text;
 // written back into a caller-allocated wchar_t buffer.
 public static class TradeUploader
 {
-    private static readonly HttpClient Client = new HttpClient();
+    private static readonly HttpClient Client = CreateClient();
+
+    private static HttpClient CreateClient()
+    {
+        var client = new HttpClient();
+        // Some feed CDNs (e.g. ForexFactory's) reject requests without a UA
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("HxTradeHelper/1.0");
+        return client;
+    }
 
     // Each chart in MT5 runs in its own thread; keep the response per-thread
     // so concurrent uploads from different charts cannot mix results
@@ -52,9 +60,35 @@ public static class TradeUploader
     }
 
     /// <summary>
-    /// Copy the response body (or error message) of the last UploadJson call
-    /// into the caller's buffer (capacity in characters, incl. terminator).
-    /// Returns the number of characters copied.
+    /// HTTP GET the given URL (used for the ForexFactory calendar feed).
+    /// Returns the HTTP status code, or -1 when the request could not be
+    /// sent. The body (or error message) is read via GetLastResponse.
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "HttpGet")]
+    public static int HttpGet(IntPtr urlPtr, int timeoutMs)
+    {
+        lastResponse = "";
+        try
+        {
+            string url = Marshal.PtrToStringUni(urlPtr) ?? "";
+            using var cts = new System.Threading.CancellationTokenSource(timeoutMs);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using HttpResponseMessage response = Client.Send(request, cts.Token);
+            using var reader = new System.IO.StreamReader(response.Content.ReadAsStream(cts.Token), Encoding.UTF8);
+            lastResponse = reader.ReadToEnd();
+            return (int)response.StatusCode;
+        }
+        catch (Exception ex)
+        {
+            lastResponse = Describe(ex);
+            return -1;
+        }
+    }
+
+    /// <summary>
+    /// Copy the response body (or error message) of the last UploadJson or
+    /// HttpGet call into the caller's buffer (capacity in characters, incl.
+    /// terminator). Returns the number of characters copied.
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "GetLastResponse")]
     public static int GetLastResponse(IntPtr buffer, int capacity)

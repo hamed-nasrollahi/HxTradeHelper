@@ -22,21 +22,29 @@
 // publish HxTradeUploader.dll and put it in MQL5\Libraries
 #import "HxTradeUploader.dll"
 int UploadJson(string apiUrl, string apiKey, string json, int timeoutMs);
+int HttpGet(string url, int timeoutMs);
 int GetLastResponse(string &buffer, int capacity);
 #import
 
 // Base folder for storing screenshots
 input string JournalBasePath = "TradesHistory";
 
-// Trade API upload (MariaDB backend, see api/README.md)
-input string ApiUrl = "http://127.0.0.1:8000/api/trades"; // Trade API endpoint
-input string ApiKey = "";                                 // Trade API key (X-Api-Key header)
-input bool UploadToApi = true;                            // Upload today's trades to the API
+// Journal upload to the dashboard (MariaDB backend, see dashboard/README.md)
+input string ApiUrl = "http://127.0.0.1:3000/api/import"; // Dashboard import endpoint
+input string ApiKey = "";                                 // Import API key (X-Api-Key header)
+input bool UploadToApi = true;                            // Upload today's trades to the dashboard
 
 
 input bool showCandleTime = false;
 input bool showSessions = false;
 input bool showSlipage = false;
+
+// ForexFactory news (fetched through HxTradeUploader.dll)
+input bool ShowNews = false;              // Fetch ForexFactory calendar (orange + red events)
+input string NewsCurrencies = "";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
+input int NewsWindowMinutes = 2;          // Show countdown when the next event is within this window
+input int NewsDurationMinutes = 15;       // How long an event counts as "in progress" after release
+input string NewsFeedUrl = "https://nfs.faireconomy.media/ff_calendar_thisweek.json";
 
 input bool SummerTime = false;
 
@@ -130,6 +138,19 @@ int dialog_tab=0;
 int winTrades = 0, loseTrades=0;
 
 //+------------------------------------------------------------------+
+//| ForexFactory calendar event (orange/red only)                    |
+//+------------------------------------------------------------------+
+struct NewsEvent
+{
+   datetime time;     // event time in GMT
+   string   currency; // e.g. "USD"
+   string   title;
+   bool     isRed;    // true = High impact, false = Medium (orange)
+};
+NewsEvent newsEvents[];
+datetime lastNewsFetch = 0;
+
+//+------------------------------------------------------------------+
 //| Journal trade record built from the account trade history        |
 //+------------------------------------------------------------------+
 struct JournalTrade
@@ -176,7 +197,7 @@ int OnInit()
    // Reconstruct existing trade elements
    ReconstructTradeElements();
 
-   if(showCandleTime || showSlipage || showSessions)
+   if(showCandleTime || showSlipage || showSessions || ShowNews)
       EventSetTimer(1);
 
    return(INIT_SUCCEEDED);
@@ -327,7 +348,228 @@ void OnTimer()
    {
       InitSessionsIndicator();
    }
+   if(ShowNews)
+   {
+      UpdateNews();
+   }
    ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Refresh the calendar hourly and the countdown label every second |
+//+------------------------------------------------------------------+
+void UpdateNews()
+{
+   if(TimeGMT() - lastNewsFetch >= 3600)
+      FetchNewsEvents();
+   UpdateNewsLabel();
+}
+
+//+------------------------------------------------------------------+
+//| Download the weekly ForexFactory calendar and keep orange/red    |
+//| events for the configured currencies                             |
+//+------------------------------------------------------------------+
+void FetchNewsEvents()
+{
+   lastNewsFetch = TimeGMT();
+
+   int status = HttpGet(NewsFeedUrl, 10000);
+   string body;
+   StringInit(body, 262144);
+   int len = GetLastResponse(body, 262144);
+   body = StringSubstr(body, 0, len);
+
+   if(status != 200)
+   {
+      Print("News fetch failed (HTTP ", status, "): ", StringSubstr(body, 0, 200));
+      lastNewsFetch = TimeGMT() - 3600 + 600; // retry in 10 minutes
+      return;
+   }
+
+   string filterCsv = NewsCurrencies;
+   if(filterCsv == "")
+      filterCsv = SymbolInfoString(Symbol(), SYMBOL_CURRENCY_BASE) + "," +
+                  SymbolInfoString(Symbol(), SYMBOL_CURRENCY_PROFIT);
+   StringToUpper(filterCsv);
+   string filters[];
+   int filterCount = StringSplit(filterCsv, ',', filters);
+   for(int i = 0; i < filterCount; i++)
+   {
+      StringTrimLeft(filters[i]);
+      StringTrimRight(filters[i]);
+   }
+
+   ArrayResize(newsEvents, 0);
+   int pos = 0;
+   while(true)
+   {
+      int start = StringFind(body, "{", pos);
+      if(start < 0)
+         break;
+      int end = StringFind(body, "}", start);
+      if(end < 0)
+         break;
+      pos = end + 1;
+      string obj = StringSubstr(body, start, end - start + 1);
+
+      string impact = JsonField(obj, "impact");
+      bool isRed = (impact == "High");
+      if(!isRed && impact != "Medium")
+         continue; // orange + red only
+
+      string country = JsonField(obj, "country");
+      StringToUpper(country);
+      bool match = false;
+      for(int i = 0; i < filterCount; i++)
+      {
+         if(filters[i] != "" && filters[i] == country)
+         {
+            match = true;
+            break;
+         }
+      }
+      if(!match)
+         continue;
+
+      datetime eventTime = ParseIso8601(JsonField(obj, "date"));
+      if(eventTime == 0)
+         continue;
+
+      int sz = ArraySize(newsEvents);
+      ArrayResize(newsEvents, sz + 1);
+      newsEvents[sz].time = eventTime;
+      newsEvents[sz].currency = country;
+      newsEvents[sz].title = JsonField(obj, "title");
+      newsEvents[sz].isRed = isRed;
+   }
+   PrintFormat("ForexFactory calendar: %d orange/red event(s) for %s", ArraySize(newsEvents), filterCsv);
+}
+
+//+------------------------------------------------------------------+
+//| Countdown label: nearest red/orange event within the window, or  |
+//| LIVE with remaining time while an event is in progress           |
+//+------------------------------------------------------------------+
+void UpdateNewsLabel()
+{
+   string name = "News_indicator";
+   datetime now = TimeGMT();
+   int window = NewsWindowMinutes * 60;
+   int duration = NewsDurationMinutes * 60;
+
+   int liveIdx = -1, nextIdx = -1;
+   for(int i = 0; i < ArraySize(newsEvents); i++)
+   {
+      datetime t = newsEvents[i].time;
+      if(t <= now && now < t + duration)
+      {
+         if(liveIdx < 0 || t < newsEvents[liveIdx].time)
+            liveIdx = i;
+      }
+      else if(t > now && t - now <= window)
+      {
+         if(nextIdx < 0 || t < newsEvents[nextIdx].time)
+            nextIdx = i;
+      }
+   }
+
+   if(liveIdx < 0 && nextIdx < 0)
+   {
+      ObjectDelete(0, name);
+      return;
+   }
+
+   string text;
+   color clr;
+   if(liveIdx >= 0)
+   {
+      int remain = (int)(newsEvents[liveIdx].time + duration - now);
+      text = StringFormat("LIVE %02d:%02d  %s %s", remain / 60, remain % 60,
+                          newsEvents[liveIdx].currency, newsEvents[liveIdx].title);
+      clr = newsEvents[liveIdx].isRed ? clrRed : clrOrange;
+   }
+   else
+   {
+      int togo = (int)(newsEvents[nextIdx].time - now);
+      text = StringFormat("%02d:%02d:%02d  %s %s", togo / 3600, (togo % 3600) / 60, togo % 60,
+                          newsEvents[nextIdx].currency, newsEvents[nextIdx].title);
+      clr = newsEvents[nextIdx].isRed ? clrRed : clrOrange;
+   }
+   CreateIndicator(340, 90, name, clr);
+   SetIndicatorText(name, text, clr);
+}
+
+//+------------------------------------------------------------------+
+//| Extract a top-level field from a flat JSON object string         |
+//+------------------------------------------------------------------+
+string JsonField(const string obj, const string key)
+{
+   string pattern = "\"" + key + "\":";
+   int p = StringFind(obj, pattern);
+   if(p < 0)
+      return "";
+   p += StringLen(pattern);
+   int n = StringLen(obj);
+   while(p < n && StringGetCharacter(obj, p) == ' ')
+      p++;
+   if(p >= n)
+      return "";
+   if(StringGetCharacter(obj, p) != '"')
+   {
+      int e = StringFind(obj, ",", p);
+      if(e < 0)
+         e = n - 1;
+      return StringSubstr(obj, p, e - p);
+   }
+   p++;
+   int e = p;
+   while(e < n)
+   {
+      ushort c = StringGetCharacter(obj, e);
+      if(c == '\\')
+      {
+         e += 2;
+         continue;
+      }
+      if(c == '"')
+         break;
+      e++;
+   }
+   string value = StringSubstr(obj, p, e - p);
+   StringReplace(value, "\\/", "/");
+   StringReplace(value, "\\\"", "\"");
+   return value;
+}
+
+//+------------------------------------------------------------------+
+//| Parse "2026-07-02T08:30:00-04:00" to a GMT datetime              |
+//+------------------------------------------------------------------+
+datetime ParseIso8601(const string s)
+{
+   if(StringLen(s) < 19)
+      return 0;
+   MqlDateTime dt = {};
+   dt.year = (int)StringToInteger(StringSubstr(s, 0, 4));
+   dt.mon  = (int)StringToInteger(StringSubstr(s, 5, 2));
+   dt.day  = (int)StringToInteger(StringSubstr(s, 8, 2));
+   dt.hour = (int)StringToInteger(StringSubstr(s, 11, 2));
+   dt.min  = (int)StringToInteger(StringSubstr(s, 14, 2));
+   dt.sec  = (int)StringToInteger(StringSubstr(s, 17, 2));
+   datetime local = StructToTime(dt);
+   if(local == 0)
+      return 0;
+
+   int offset = 0;
+   if(StringLen(s) >= 25)
+   {
+      string sign = StringSubstr(s, 19, 1);
+      if(sign == "+" || sign == "-")
+      {
+         int oh = (int)StringToInteger(StringSubstr(s, 20, 2));
+         int om = (int)StringToInteger(StringSubstr(s, 23, 2));
+         offset = (oh * 3600 + om * 60) * (sign == "-" ? -1 : 1);
+      }
+   }
+   return local - offset; // to GMT
 }
 
 void DrawStats()
@@ -1727,7 +1969,7 @@ void RefreshLines()
 
 void DeleteLines()
 {
-   string lines[] = {"SpreadText", "TimeLeft","Tokyo_indicator","London_indicator","NewYork_indicator"};
+   string lines[] = {"SpreadText", "TimeLeft","Tokyo_indicator","London_indicator","NewYork_indicator","News_indicator"};
    for (int i = 0; i < ArraySize(lines); i++)
    {
       ObjectDelete(0, lines[i]);

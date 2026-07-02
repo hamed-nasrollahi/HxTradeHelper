@@ -29,6 +29,11 @@ The panel is an MQL5 indicator (`hx_trade_helper.mq5`) with three tabs:
 - **Sessions** — Tokyo/London/New York vertical session lines plus
   countdown labels (open/close timers), and a candle-close countdown and
   spread display (input toggles)
+- **News countdown** — optionally fetches the ForexFactory weekly
+  calendar (through the uploader DLL), keeps only orange/red-impact
+  events for your currencies, and shows a corner countdown to the next
+  event — switching to a LIVE remaining-time display while the event is
+  in progress
 - **Order blocks** — one-click rectangles for daily / H4 / H1 /
   support-resistance zones
 - **Moving averages** — EMA 20/60/200 toggles
@@ -58,8 +63,8 @@ One click on **Export Journal**:
 3. Captures **H1, M5 and M1 screenshots per trade**, scrolled to the
    trade's entry bar, on freshly opened charts with a clean black & white
    scheme — objects drawn on your working charts never appear in them
-4. **POSTs the JSON to the trade API**, which upserts into MariaDB
-   (re-exporting is safe; open trades update once they close)
+4. **POSTs the JSON to the dashboard's import endpoint**, which upserts
+   into MariaDB (re-exporting is safe; open trades update once they close)
 
 Output layout under `MQL5\Files`:
 
@@ -81,11 +86,11 @@ TradesHistory\
 |------|----------|
 | `hx_trade_helper.mq5` | The indicator (panel, tools, journal export) |
 | `DialogHx.mqh`, `TradeElement.mqh` | Dialog subclass and the drag-adjustable trade planner element |
-| `dotnet/HxTradeUploader/` | .NET 8 Native AOT library the indicator calls to POST the journal to the API |
+| `dotnet/HxTradeUploader/` | .NET 8 Native AOT library the indicator calls to POST the journal to the dashboard |
 | `dotnet/schema.sql` | MariaDB setup: database, `trades` table, application user |
 | `dotnet/README.md` | DLL build/install details |
-| `api/` | FastAPI service that receives journal exports and upserts them into MariaDB |
-| `api/README.md` | API setup details |
+| `dashboard/` | Next.js analytics dashboard: journal import endpoint, strategy tagging, statistics, equity curve, Docker deployment |
+| `dashboard/README.md` | Dashboard setup details |
 
 ## Installation
 
@@ -112,29 +117,35 @@ DLL imports* (and the same option on the indicator's Common tab when
 attaching it). The DLL is self-contained — no .NET runtime needed on the
 trading machine.
 
-### 3. Database and API (optional, for the MariaDB journal)
+### 3. Database and dashboard (optional, for the MariaDB journal)
 
 ```
-mysql -u root -p < dotnet/schema.sql        # edit the password first
-cd api
-pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000
+cd dashboard
+DB_PASSWORD=<pick-a-password> docker compose up -d --build
 ```
 
-Connection settings come from `HX_DB_*` environment variables and the API
-key from `HX_API_KEY` — see `api/README.md`. Without the API running, the
-journal still writes the CSV/JSON files and screenshots locally; only the
-upload step is skipped (with a note in the Experts log).
+This starts MariaDB (schema applied automatically) and the analytics
+dashboard on <http://localhost:3000>, whose `POST /api/import` endpoint
+receives the indicator's journal uploads — set the indicator's `ApiUrl`
+input to `http://<dashboard-host>:3000/api/import`. See
+`dashboard/README.md` for using an existing MariaDB instead. Without the
+dashboard running, the journal still writes the CSV/JSON files and
+screenshots locally; only the upload step is skipped (with a note in the
+Experts log).
 
 ## Key inputs
 
 | Input | Default | Meaning |
 |-------|---------|---------|
 | `JournalBasePath` | `TradesHistory` | Base folder for all exports/screenshots (under `MQL5\Files`) |
-| `ApiUrl` | `http://127.0.0.1:8000/api/trades` | Trade API endpoint |
+| `ApiUrl` | `http://127.0.0.1:3000/api/import` | Dashboard import endpoint |
 | `ApiKey` | *(empty)* | Sent as `X-Api-Key` header when set |
-| `UploadToApi` | `true` | POST the journal to the API after export |
+| `UploadToApi` | `true` | POST the journal to the dashboard after export |
 | `showCandleTime` / `showSessions` / `showSlipage` | `false` | Candle-close countdown, session timers, spread label (1-second timer starts only if one is enabled) |
+| `ShowNews` | `false` | Fetch the ForexFactory calendar and show the red/orange event countdown |
+| `NewsCurrencies` | *(empty)* | CSV currency filter for events; empty = the chart symbol's base and profit currencies |
+| `NewsWindowMinutes` | 2 | Countdown appears when the next event is within this window |
+| `NewsDurationMinutes` | 15 | How long an event stays "LIVE" after its release time |
 | `Level1/2/3` | 1.25 / 2.50 / 5.00 | Round-number grid steps (price units) |
 | `ATR_Period` | 14 | Daily ATR period for the bands |
 | `SummerTime` | `false` | DST adjustment for session times |

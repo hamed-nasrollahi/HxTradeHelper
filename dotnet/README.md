@@ -49,6 +49,7 @@ explicitly in the `#import` block:
 ```mql5
 #import "HxTradeUploader.dll"
 int UploadJson(string apiUrl, string apiKey, string json, int timeoutMs);
+int HttpGet(string url, int timeoutMs);
 int GetLastResponse(string &buffer, int capacity);
 #import
 ```
@@ -57,6 +58,8 @@ int GetLastResponse(string &buffer, int capacity);
   body (`Content-Type: application/json`, optional `X-Api-Key` header) and
   returns the HTTP status code, or `-1` when the request could not be sent
   at all (connection refused, timeout, DNS).
+- `HttpGet` performs a plain GET (the indicator uses it for the
+  ForexFactory calendar feed) with the same status-code convention.
 - `GetLastResponse` copies the response body of the last call (or its error
   message) into a caller-allocated buffer — initialize it first with
   `StringInit(buffer, capacity)` — and returns the number of characters

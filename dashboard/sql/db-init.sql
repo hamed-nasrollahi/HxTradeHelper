@@ -1,11 +1,9 @@
--- HxTradeHelper trade journal - MariaDB setup
--- Run as root:  mysql -u root -p < schema.sql
--- Creates the database, the trades table and the application user the
--- trade API connects with (change the password before running!).
-
-CREATE DATABASE IF NOT EXISTS hx_trades CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-
-USE hx_trades;
+-- Base trades table for a fresh database. Only needed when the compose
+-- stack creates a brand-new MariaDB; an existing hx_trades database
+-- already has this from dotnet/schema.sql.
+-- (No CREATE DATABASE / CREATE USER here: docker-entrypoint-initdb.d
+-- scripts run inside the database created by MARIADB_DATABASE, and the
+-- MARIADB_USER env var already owns it.)
 
 CREATE TABLE IF NOT EXISTS trades (
     id           BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -29,9 +27,3 @@ CREATE TABLE IF NOT EXISTS trades (
     KEY idx_open_time (open_time),
     KEY idx_symbol (symbol)
 ) ENGINE = InnoDB;
-
--- Application user for the dashboard (matches the HX_DB_USER / HX_DB_PASSWORD
--- defaults in dashboard/README.md). CHANGE THE PASSWORD.
-CREATE USER IF NOT EXISTS 'hx'@'localhost' IDENTIFIED BY 'change-me';
-GRANT SELECT, INSERT, UPDATE ON hx_trades.trades TO 'hx'@'localhost';
-FLUSH PRIVILEGES;
