@@ -29,6 +29,11 @@ The panel is an MQL5 indicator (`hx_trade_helper.mq5`) with three tabs:
 - **Sessions** — Tokyo/London/New York vertical session lines plus
   countdown labels (open/close timers), and a candle-close countdown and
   spread display (input toggles)
+- **News countdown** — optionally fetches the ForexFactory weekly
+  calendar (through the uploader DLL), keeps only orange/red-impact
+  events for your currencies, and shows a corner countdown to the next
+  event — switching to a LIVE remaining-time display while the event is
+  in progress
 - **Order blocks** — one-click rectangles for daily / H4 / H1 /
   support-resistance zones
 - **Moving averages** — EMA 20/60/200 toggles
@@ -137,6 +142,10 @@ Experts log).
 | `ApiKey` | *(empty)* | Sent as `X-Api-Key` header when set |
 | `UploadToApi` | `true` | POST the journal to the dashboard after export |
 | `showCandleTime` / `showSessions` / `showSlipage` | `false` | Candle-close countdown, session timers, spread label (1-second timer starts only if one is enabled) |
+| `ShowNews` | `false` | Fetch the ForexFactory calendar and show the red/orange event countdown |
+| `NewsCurrencies` | *(empty)* | CSV currency filter for events; empty = the chart symbol's base and profit currencies |
+| `NewsWindowMinutes` | 60 | Countdown appears when the next event is within this window |
+| `NewsDurationMinutes` | 15 | How long an event stays "LIVE" after its release time |
 | `Level1/2/3` | 1.25 / 2.50 / 5.00 | Round-number grid steps (price units) |
 | `ATR_Period` | 14 | Daily ATR period for the bands |
 | `SummerTime` | `false` | DST adjustment for session times |
