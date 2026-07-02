@@ -1,4 +1,8 @@
--- HxTradeHelper trade journal schema for MariaDB
+-- HxTradeHelper trade journal - MariaDB setup
+-- Run as root:  mysql -u root -p < schema.sql
+-- Creates the database, the trades table and the application user the
+-- trade API connects with (change the password before running!).
+
 CREATE DATABASE IF NOT EXISTS hx_trades CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 USE hx_trades;
@@ -25,3 +29,9 @@ CREATE TABLE IF NOT EXISTS trades (
     KEY idx_open_time (open_time),
     KEY idx_symbol (symbol)
 ) ENGINE = InnoDB;
+
+-- Application user for the trade API (matches the HX_DB_USER / HX_DB_PASSWORD
+-- defaults in api/README.md). CHANGE THE PASSWORD.
+CREATE USER IF NOT EXISTS 'hx'@'localhost' IDENTIFIED BY 'change-me';
+GRANT SELECT, INSERT, UPDATE ON hx_trades.trades TO 'hx'@'localhost';
+FLUSH PRIVILEGES;

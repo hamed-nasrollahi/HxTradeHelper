@@ -32,6 +32,11 @@ public:
       CAppDialog::Minimize();
      }
 
+   bool IsMinimized(void)
+     {
+      return(m_minimized);
+     }
+
 
 protected:
    virtual bool OnEvent(const int id,
