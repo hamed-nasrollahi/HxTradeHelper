@@ -13,6 +13,11 @@ const LINKS = [
 
 export default function Nav() {
   const pathname = usePathname();
+  if (pathname === "/login") return null;
+  const logout = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "/login";
+  };
   return (
     <header className="border-b" style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}>
       <div className="mx-auto flex max-w-6xl items-center gap-1 px-4 py-3">
@@ -34,6 +39,13 @@ export default function Nav() {
             </Link>
           );
         })}
+        <button
+          onClick={logout}
+          className="ml-auto rounded-md px-3 py-1.5 text-sm"
+          style={{ color: "var(--ink-2)" }}
+        >
+          Logout
+        </button>
       </div>
     </header>
   );

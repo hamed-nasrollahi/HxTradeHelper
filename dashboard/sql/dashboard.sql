@@ -15,8 +15,8 @@ ALTER TABLE trades ADD COLUMN IF NOT EXISTS strategy_id INT DEFAULT NULL;
 
 -- Deleting a strategy unassigns its trades instead of deleting them
 ALTER TABLE trades
-    ADD CONSTRAINT IF NOT EXISTS fk_trades_strategy
-    FOREIGN KEY (strategy_id) REFERENCES strategies (id)
+    ADD CONSTRAINT fk_trades_strategy
+    FOREIGN KEY IF NOT EXISTS (strategy_id) REFERENCES strategies (id)
     ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_trades_strategy ON trades (strategy_id);

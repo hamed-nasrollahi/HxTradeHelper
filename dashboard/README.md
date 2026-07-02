@@ -24,19 +24,24 @@ London-breakout strategy on XAUUSD, Buys only, last month".
 
 ## Quick start (Docker Compose)
 
+The stack expects an existing MariaDB server (there is no bundled database
+service). One-time database preparation:
+
+```
+mysql -u root -p <your-db> < sql/db-init.sql     # base trades table (new DB only)
+mysql -u root -p <your-db> < sql/dashboard.sql   # strategies table + strategy_id
+```
+
+Then:
+
 ```
 cd dashboard
-DB_PASSWORD=<pick-a-password> DB_ROOT_PASSWORD=<pick-another> docker compose up -d --build
+cp .env.sample .env    # fill in HX_DB_* and the dashboard login
+docker compose up -d --build
 ```
 
-This starts:
-
-- **db** — MariaDB 11 with the `hx_trades` database. On first start it runs
-  `sql/db-init.sql` (base `trades` table) and `sql/dashboard.sql`
-  (strategies table + `strategy_id` column). Port 3306 is published for
-  direct SQL access; the MT5 journal itself arrives over HTTP (below).
-- **dashboard** — this app on <http://localhost:3000>, pre-pointed at the
-  `db` service.
+This starts the dashboard on <http://localhost:3000>, reading its DB
+connection, import API key and Basic Auth login from `.env`.
 
 ## Journal import endpoint
 
@@ -60,29 +65,13 @@ so re-exporting the same day is safe: open trades update once they close,
 and strategy assignments made in the dashboard are never overwritten by a
 re-import.
 
-Data persists in the `db-data` volume; dashboard settings in `dashboard-data`.
+Dashboard settings persist in the `dashboard-data` volume.
 
-### Using an existing MariaDB instead
-
-1. Apply the dashboard schema to your existing database:
-
-   ```
-   mysql -u root -p hx_trades < sql/dashboard.sql
-   ```
-
-   Uncomment/adjust the `GRANT` lines at the bottom if the dashboard
-   connects with the restricted `hx` user (it needs `SELECT, INSERT,
-   UPDATE, DELETE` on `strategies` and `SELECT, UPDATE` on `trades`).
-
-2. Remove the `db` service (and `depends_on`) from `docker-compose.yml`,
-   or run only the dashboard:
-
-   ```
-   docker compose up -d --build dashboard
-   ```
-
-3. Open **Settings** in the dashboard, enter host/port/database/user/
-   password, hit *Test connection*, then *Save*.
+When the dashboard connects with a restricted DB user, uncomment/adjust
+the `GRANT` lines at the bottom of `sql/dashboard.sql` (it needs `SELECT,
+INSERT, UPDATE, DELETE` on `strategies` and `SELECT, UPDATE` on `trades`).
+Connection details can also be changed at runtime on the **Settings** page
+(*Test connection*, then *Save*).
 
 ## Configuration
 
@@ -99,7 +88,12 @@ initial defaults only:
 | `HX_DB_USER` | `hx` |
 | `HX_DB_PASSWORD` | *(empty)* |
 | `HX_API_KEY` | *(empty)* — initial journal import key |
+| `DASHBOARD_USER` | `admin` — Basic Auth login |
+| `DASHBOARD_PASSWORD` | `admin` — Basic Auth password |
 | `DATA_DIR` | `/app/data` (where settings.json lives) |
+
+Copy `.env.sample` to `.env` and fill in real values; `.env` is gitignored
+and both `next dev`/`next start` and Docker Compose (`env_file`) read it.
 
 ## Local development
 
@@ -116,7 +110,7 @@ Point the Settings page (or `HX_DB_*` env vars) at any MariaDB with the
 
 | Script | Purpose |
 |--------|---------|
-| `sql/db-init.sql` | Base `trades` table — only for a brand-new database (compose runs it automatically) |
+| `sql/db-init.sql` | Base `trades` table — only for a brand-new database |
 | `sql/dashboard.sql` | Dashboard additions: `strategies` table, `trades.strategy_id` FK, indexes. Idempotent — safe to re-run on an existing database |
 
 ## How the statistics are defined
@@ -135,7 +129,12 @@ Point the Settings page (or `HX_DB_*` env vars) at any MariaDB with the
 
 ## Security note
 
-The dashboard itself has no login — deploy it on a private network or
-behind an authenticating reverse proxy (Basic Auth, Authelia, Cloudflare
-Access, ...). The Settings page writes DB credentials to the server-side
-data volume only.
+Every page and API route requires signing in at `/login` with
+`DASHBOARD_USER` / `DASHBOARD_PASSWORD` (session cookie, enforced by
+`src/middleware.ts`) — change the default `admin`/`admin` before exposing
+the dashboard; changing them also invalidates existing sessions. The only
+exception is `POST /api/import`, which the MT5 uploader authenticates
+with its own `X-Api-Key`. The login form sends credentials in cleartext,
+so put the dashboard behind HTTPS (reverse proxy) when it is reachable
+from the internet. The Settings page writes DB credentials to the
+server-side data volume only.
