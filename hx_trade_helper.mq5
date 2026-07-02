@@ -101,8 +101,14 @@ input int Width_Session = 1;
 input double tradeRisk   = 1.0;              // Risk per trade (R)
 
 
+// Dialog tabs
+#define TAB_TRADE    0
+#define TAB_BACKTEST 1
+#define TAB_JOURNAL  2
+
 DialogHx  AppWindow;
-CButton  btnJournal, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB, 
+CButton  btnTabTrade, btnTabTest, btnTabJournal;
+CButton  btnJournal, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
 btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc, btnReset;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
@@ -149,17 +155,18 @@ int OnInit()
       Print("Error: Cannot create base directory: ", JournalBasePath);
    }
    
-   int chartWidth = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0) - 120;
+   int chartWidth = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0) - 160;
    //--- create application dialog
    CleanAppWindows();
-   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+110,680))
+   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+150,570))
       return(INIT_FAILED);
-      
-   
+
+
    PopulateTabs();
-      
+
    //--- run application
    AppWindow.Run();
+   ApplyTabVisibility();
    
    // Initialize the dynamic list
    tradeElements = new CArrayObj();
@@ -173,46 +180,113 @@ int OnInit()
 
 void PopulateTabs()
 {
-  //hide all buttons
-  switch(dialog_tab)
-  {  
-   case 1:
-     
-    break;
-   default:
-    CreateButton(btnJournal, "btnJournal", "Journal",10,10,90,30);
-    CreateButton(btnYesterday, "btnYesterday", "Yesterday",10,40,90,60);
-    CreateButton(btnDayBefore, "btnDayBefore", "Day Before",10,70,90,90);
-    CreateButton(btnLastWeek, "btnLastWeek", "Last Week",10,100,90,120);
-    CreateButton(btnWeeklyMap, "btnWeeklyMap", "Week Map",10,130,90,150);
-    CreateButton(btnLevel1, "btnLevel1", "L1",10,160,45,180);
-    CreateButton(btnLevel2, "btnLevel2", "L2",55,160,90,180);
-    CreateButton(btnLevel3, "btnLevel3", "L3",10,190,45,210);
-    CreateButton(btnATR, "btnATR", "ATR",55,190,90,210);
-    CreateButton(btnSessions, "btnSessions", "Sessions",10,220,90,240);
-    CreateButton(btnDOB, "btnDOB", "DOB",10,250,45,270);
-    CreateButton(btnH4OB, "btnH4OB", "H4OB",55,250,90,270);
-    CreateButton(btnH1OB, "btnH1OB", "H1OB",10,280,45,300);
-    CreateButton(btnSROB, "btnSROB", "SROB",55,280,90,300);
-    CreateButton(btnSell, "btnSell", "Sell",10,310,45,330);
-    CreateButton(btnBuy, "btnBuy", "Buy",55,310,90,330);
-    CreateButton(btnMA20, "btnMA20", "M20",10,340,45,360);
-    CreateButton(btnCLR, "btnCLR", "CLR",55,340,90,360);
-    CreateButton(btnMA60, "btnMA60", "M60",10,370,45,390);
-    CreateButton(btnMA200, "btnMA200", "M200",55,370,90,390);
-    CreateButton(btnFib2, "btnFib2", "Fib2",55,400,90,420);
-    CreateButton(btnFib1, "btnFib1", "Fib1",10,400,45,420) ;   
-    CreateButton(btnWB, "btnWB", "W-B",55,430,90,450) ; 
-    CreateButton(btnLB, "btnLB", "L-B",10,430,45,450) ; 
-    CreateButton(btnWS, "btnWS", "W-S",55,460,90,480) ; 
-    CreateButton(btnLS, "btnLS", "L-S",10,460,45,480) ; 
-    CreateButton(btnExp, "btnExp", "Exp",55,490,90,510) ;
-    CreateButton(btnEnbl, "btnEnbl", "enbl",10,490,45,510) ;
-    CreateButton(btnReset,  "btnReset",  "Rst", 10,520,45,540) ;
-    CreateButton(btnReCalc, "btnReCalc", "CLC",55,520,90,540) ;
-    break;
-  }
+  // Tab selectors, always visible
+  CreateButton(btnTabTrade, "btnTabTrade", "Trade",10,10,55,32);
+  CreateButton(btnTabTest, "btnTabTest", "Test",58,10,98,32);
+  CreateButton(btnTabJournal, "btnTabJournal", "Jrnl",101,10,140,32);
+  btnTabTrade.Locking(true);
+  btnTabTest.Locking(true);
+  btnTabJournal.Locking(true);
 
+  // Trade tab
+  CreateButton(btnYesterday, "btnYesterday", "Yesterday",10,40,140,60);
+  CreateButton(btnDayBefore, "btnDayBefore", "Day Before",10,70,140,90);
+  CreateButton(btnLastWeek, "btnLastWeek", "Last Week",10,100,140,120);
+  CreateButton(btnWeeklyMap, "btnWeeklyMap", "Week Map",10,130,140,150);
+  CreateButton(btnLevel1, "btnLevel1", "L1",10,160,73,180);
+  CreateButton(btnLevel2, "btnLevel2", "L2",77,160,140,180);
+  CreateButton(btnLevel3, "btnLevel3", "L3",10,190,73,210);
+  CreateButton(btnATR, "btnATR", "ATR",77,190,140,210);
+  CreateButton(btnSessions, "btnSessions", "Sessions",10,220,140,240);
+  CreateButton(btnDOB, "btnDOB", "DOB",10,250,73,270);
+  CreateButton(btnH4OB, "btnH4OB", "H4OB",77,250,140,270);
+  CreateButton(btnH1OB, "btnH1OB", "H1OB",10,280,73,300);
+  CreateButton(btnSROB, "btnSROB", "SROB",77,280,140,300);
+  CreateButton(btnSell, "btnSell", "Sell",10,310,73,330);
+  CreateButton(btnBuy, "btnBuy", "Buy",77,310,140,330);
+  CreateButton(btnMA20, "btnMA20", "M20",10,340,73,360);
+  CreateButton(btnCLR, "btnCLR", "CLR",77,340,140,360);
+  CreateButton(btnMA60, "btnMA60", "M60",10,370,73,390);
+  CreateButton(btnMA200, "btnMA200", "M200",77,370,140,390);
+  CreateButton(btnFib1, "btnFib1", "Fib1",10,400,73,420);
+  CreateButton(btnFib2, "btnFib2", "Fib2",77,400,140,420);
+
+  // Back test tab
+  CreateButton(btnLB, "btnLB", "L-B",10,40,73,60);
+  CreateButton(btnWB, "btnWB", "W-B",77,40,140,60);
+  CreateButton(btnLS, "btnLS", "L-S",10,70,73,90);
+  CreateButton(btnWS, "btnWS", "W-S",77,70,140,90);
+  CreateButton(btnEnbl, "btnEnbl", "Stats",10,100,140,120);
+  CreateButton(btnReset, "btnReset", "Rst",10,130,73,150);
+  CreateButton(btnReCalc, "btnReCalc", "CLC",77,130,140,150);
+  CreateButton(btnExp, "btnExp", "Export",10,160,140,180);
+
+  // Journal tab
+  CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,140,70);
+}
+
+//+------------------------------------------------------------------+
+//| Show/hide buttons according to the active tab                    |
+//+------------------------------------------------------------------+
+void ApplyTabVisibility()
+{
+   bool trade   = (dialog_tab == TAB_TRADE);
+   bool test    = (dialog_tab == TAB_BACKTEST);
+   bool journal = (dialog_tab == TAB_JOURNAL);
+
+   btnTabTrade.Pressed(trade);
+   btnTabTest.Pressed(test);
+   btnTabJournal.Pressed(journal);
+
+   // Trade tab
+   ShowButton(btnYesterday, trade);
+   ShowButton(btnDayBefore, trade);
+   ShowButton(btnLastWeek, trade);
+   ShowButton(btnWeeklyMap, trade);
+   ShowButton(btnLevel1, trade);
+   ShowButton(btnLevel2, trade);
+   ShowButton(btnLevel3, trade);
+   ShowButton(btnATR, trade);
+   ShowButton(btnSessions, trade);
+   ShowButton(btnDOB, trade);
+   ShowButton(btnH4OB, trade);
+   ShowButton(btnH1OB, trade);
+   ShowButton(btnSROB, trade);
+   ShowButton(btnSell, trade);
+   ShowButton(btnBuy, trade);
+   ShowButton(btnMA20, trade);
+   ShowButton(btnCLR, trade);
+   ShowButton(btnMA60, trade);
+   ShowButton(btnMA200, trade);
+   ShowButton(btnFib1, trade);
+   ShowButton(btnFib2, trade);
+
+   // Back test tab
+   ShowButton(btnLB, test);
+   ShowButton(btnWB, test);
+   ShowButton(btnLS, test);
+   ShowButton(btnWS, test);
+   ShowButton(btnEnbl, test);
+   ShowButton(btnReset, test);
+   ShowButton(btnReCalc, test);
+   ShowButton(btnExp, test);
+
+   // Journal tab
+   ShowButton(btnJournal, journal);
+}
+
+void ShowButton(CButton &btn, const bool visible)
+{
+   if(visible)
+      btn.Show();
+   else
+      btn.Hide();
+}
+
+void SelectTab(const int tab)
+{
+   dialog_tab = tab;
+   ApplyTabVisibility();
 }
 
 //+------------------------------------------------------------------+
@@ -353,7 +427,19 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
    }
    else if(id == CHARTEVENT_OBJECT_CLICK)
    {
-      if(sparam == "btnJournal")
+      if(sparam == "btnTabTrade")
+      {
+         SelectTab(TAB_TRADE);
+      }
+      else if(sparam == "btnTabTest")
+      {
+         SelectTab(TAB_BACKTEST);
+      }
+      else if(sparam == "btnTabJournal")
+      {
+         SelectTab(TAB_JOURNAL);
+      }
+      else if(sparam == "btnJournal")
       {
          ExportTodaysTrades();
       }
@@ -763,6 +849,10 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
    }
     
    AppWindow.ChartEvent(id,lparam,dparam,sparam);
+   // Restoring the dialog shows every control and clicking a locking tab
+   // button toggles its pressed state, so re-apply the active tab afterwards
+   if(id == CHARTEVENT_OBJECT_CLICK && !AppWindow.IsMinimized())
+      ApplyTabVisibility();
    // Force immediate redraw
    ChartRedraw();
 }
@@ -995,6 +1085,7 @@ void CaptureScreenshots(const string folder)
    Sleep(500); // Allow chart to load
    AppWindow.Show();
    AppWindow.Maximize();
+   ApplyTabVisibility(); // Maximize shows all controls again
 }
 
 //+------------------------------------------------------------------+
