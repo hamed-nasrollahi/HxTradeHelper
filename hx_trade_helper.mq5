@@ -875,21 +875,35 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 //+-----------------------------------------------------------------------+
 void CleanAppWindows()
 {
-   // Loop backwards over the edit objects: deleting invalidates the indices
-   // that follow, and ObjectName must use the same type filter as the count
-   int totalObjects = ObjectsTotal(0,0,OBJ_EDIT);
-   for (int i = totalObjects - 1; i >= 0; i--)
+   // Loop through all Edit objects and collect the {number} prefix of every
+   // "Hx Helper" caption. The caption Edit has description (OBJPROP_TEXT)
+   // "Hx Helper" and a name in the format {number}Caption, so the {number}
+   // prefix is shared by all related objects.
+   // Collect prefixes first, then delete, so deleting doesn't shift the indices
+   // we are iterating over.
+   string instanceNames[];
+   int totalObjects = ObjectsTotal(0, 0, OBJ_EDIT);
+   for (int i = 0; i < totalObjects; i++)
    {
       string objectName = ObjectName(0, i, 0, OBJ_EDIT);
       string caption;
-      ObjectGetString(0,objectName,OBJPROP_TEXT,0,caption);
+      ObjectGetString(0, objectName, OBJPROP_TEXT, 0, caption);
 
-      if (StringFind(objectName, "Caption") == 0 || StringFind(caption, "Hx Helper") == 0)
+      int captionPos = StringFind(objectName, "Caption");
+      if (captionPos > 0 && StringFind(caption, "Hx Helper") == 0)
       {
-         string instanceName = StringSubstr(objectName, 0, StringFind(objectName, "Caption"));
-         PrintFormat("Remove windows %s on %s", instanceName, _Symbol);
-         ObjectsDeleteAll(0,instanceName,0,-1);
+         string instanceName = StringSubstr(objectName, 0, captionPos);
+         int size = ArraySize(instanceNames);
+         ArrayResize(instanceNames, size + 1);
+         instanceNames[size] = instanceName;
       }
+   }
+
+   // Remove every object whose name starts with a collected {number} prefix
+   for (int i = 0; i < ArraySize(instanceNames); i++)
+   {
+      PrintFormat("Remove windows %s on %s", instanceNames[i], _Symbol);
+      ObjectsDeleteAll(0, instanceNames[i], 0, -1);
    }
 }
 
