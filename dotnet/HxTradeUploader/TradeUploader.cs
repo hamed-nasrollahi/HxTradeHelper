@@ -10,7 +10,10 @@ public static class TradeUploader
 {
     private static readonly HttpClient Client = new HttpClient();
 
-    private static string lastResponse = "";
+    // Each chart in MT5 runs in its own thread; keep the response per-thread
+    // so concurrent uploads from different charts cannot mix results
+    [ThreadStatic]
+    private static string lastResponse;
 
     /// <summary>
     /// POST the JSON payload to the trade API.

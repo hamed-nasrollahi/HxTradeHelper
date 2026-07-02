@@ -8,6 +8,9 @@
 #property description "nasrollahi.hamed@gmail.com"
 #property version   "1.2"
 #property strict
+#property indicator_chart_window
+#property indicator_buffers 0
+#property indicator_plots   0
 
 
 #include "DialogHx.mqh"
@@ -116,7 +119,7 @@ yesterdayEnable = false, atrEnable = true, lastWeekMapEnable = false;
 // Global variable to store the date of the last update
 int lastUpdateDate = 0;
 double lastHigh = 0;
-double lastLow = 0;
+double lastLow = DBL_MAX;
 datetime GMTOffset;
 
 CArrayObj *tradeElements= NULL; // Dynamic list to hold CTradeElement instances
@@ -172,9 +175,10 @@ int OnInit()
    tradeElements = new CArrayObj();
    // Reconstruct existing trade elements
    ReconstructTradeElements();
-    
-   //EventSetTimer(1);
-   
+
+   if(showCandleTime || showSlipage || showSessions)
+      EventSetTimer(1);
+
    return(INIT_SUCCEEDED);
 }
 
@@ -294,21 +298,22 @@ void SelectTab(const int tab)
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   EventKillTimer();
    //--- destroy dialog
    AppWindow.Destroy(reason);
    // Remove all lines when the indicator is removed
    DeleteLines();
-   
-   //EventKillTimer();
-   
+
    //RemoveAllTradeElements();
    delete tradeElements; // Delete the dynamic list
 }
 
-void OnTimera()
+//+------------------------------------------------------------------+
+//| Second-based displays (countdowns, spread) run on a timer instead |
+//| of every tick, and keep updating even when no ticks arrive        |
+//+------------------------------------------------------------------+
+void OnTimer()
 {
-   //EventKillTimer();
-   //calculate spread indicatoryou do
    if(showCandleTime)
    {
       InitCandleTimer();
@@ -317,12 +322,12 @@ void OnTimera()
    {
       InitSpreadIndicator();
    }
-   
+
    if(showSessions)
    {
       InitSessionsIndicator();
-   }   
-   //EventSetTimer(1);
+   }
+   ChartRedraw();
 }
 
 void DrawStats()
@@ -371,23 +376,30 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
+   if(rates_total <= 0)
+      return(0);
+
+   // OnCalculate arrays are plain arrays (index 0 = the oldest bar), flip
+   // them so index 0 is the current bar as the logic below expects
+   ArraySetAsSeries(time, true);
+   ArraySetAsSeries(high, true);
+   ArraySetAsSeries(low, true);
+
    MqlDateTime tm  ={};
    if(!TimeToStruct(time[0],tm))
    Print("TimeToStruct() failed. Error ", GetLastError());
-   
-   OnTimera();
-   
+
    // Check if the date has changed
    if (tm.day != lastUpdateDate)
    {
      // Ensure old lines are removed before creating new ones
      DeleteLines();
      lastHigh = 0;
-     lastLow = 0;
+     lastLow = DBL_MAX;
      UpdateLines();
-     lastUpdateDate = tm.day; // Update the last update date     
+     lastUpdateDate = tm.day; // Update the last update date
    }
-   
+
    if(high[0] > lastHigh)
    {
       lastHigh = high[0];
@@ -518,6 +530,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       }
       else if(sparam == "btnWS")
       {
+        winTrades ++;
         long firstVisibleBar, visibleBars;
         ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
         ChartGetInteger(0, CHART_VISIBLE_BARS, 0, visibleBars);
@@ -572,8 +585,8 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
                }
 
          // Write CSV
-         FolderCreate("TradesHistory");
-         string fileName = "TradesHistory\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
+         FolderCreate(JournalBasePath);
+         string fileName = JournalBasePath + "\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
          int fh = FileOpen(fileName, FILE_WRITE | FILE_ANSI | FILE_CSV, ',');
          if(fh == INVALID_HANDLE)
          {
@@ -599,7 +612,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             Print("Trades exported to: ", TerminalInfoString(TERMINAL_DATA_PATH), "\\MQL5\\Files\\", fileName);
 
             // Write JSON sidecar for the Python importer
-            string jsonFile = "TradesHistory\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".json";
+            string jsonFile = JournalBasePath + "\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".json";
             int jh = FileOpen(jsonFile, FILE_WRITE | FILE_ANSI | FILE_TXT);
             if(jh != INVALID_HANDLE)
             {
@@ -948,20 +961,24 @@ void ReconstructTradeElements()
 //+-----------------------------------------------------------------------+
 void DeleteIndicatorByHandleId(int &handleId)
 {
-   // Iterate through all indicators on the chart
+   // Iterate backwards: deleting shifts the indices that follow
    int totalIndicators = ChartIndicatorsTotal(0, 0);
-   for(int i = 0; i < totalIndicators; i++)
+   for(int i = totalIndicators - 1; i >= 0; i--)
    {
       string indName = ChartIndicatorName(0,0,i);
-      int handle = ChartIndicatorGet(0, 0, indName); // Get the handle of the indicator
+      // ChartIndicatorGet adds a reference to the handle, so every handle
+      // obtained here must be released again
+      int handle = ChartIndicatorGet(0, 0, indName);
       if(handle == handleId)
       {
-         if(!ChartIndicatorDelete(0, 0, indName) || !IndicatorRelease(handleId) )
-         {
+         if(!ChartIndicatorDelete(0, 0, indName))
             PrintFormat("Failed to remove indicator %s from the chart. Error code  %d", indName, GetLastError());
-            handleId = INVALID_HANDLE;
-         }
+         IndicatorRelease(handle);   // reference from ChartIndicatorGet
+         IndicatorRelease(handleId); // original reference from iMA
+         handleId = INVALID_HANDLE;
+         return;
       }
+      IndicatorRelease(handle);
    }
 }
 
@@ -983,6 +1000,9 @@ void AddTradeElement(string instanceName, double currentPrice, double lotSize, d
 //+------------------------------------------------------------------+
 void UpdateTradeElement(string instanceName)
 {
+   if (tradeElements == NULL)
+      return;
+
    // Search for the trade element by instance name
     for (int i = 0; i < tradeElements.Total(); i++)
     {
