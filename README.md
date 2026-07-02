@@ -1,5 +1,8 @@
 # HxTradeHelper
 
+[![GitHub stars](https://img.shields.io/github/stars/hamed-nasrollahi/HxTradeHelper?style=social)](https://github.com/hamed-nasrollahi/HxTradeHelper/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/hamed-nasrollahi/HxTradeHelper?style=social)](https://github.com/hamed-nasrollahi/HxTradeHelper/network/members)
+
 A MetaTrader 5 chart panel for intraday traders: reference levels and
 session tools for live trading, a manual back-testing workflow with
 win/lose statistics, and a one-click trade journal that exports your day's
@@ -151,3 +154,9 @@ inputs as well.
   SL/TP recorded on the deals.
 - MQL5 indicators may not call `WebRequest`, which is why the upload goes
   through the native DLL instead.
+
+## Stargazers over time
+
+[![Stargazers over time](https://starchart.cc/hamed-nasrollahi/HxTradeHelper.svg?variant=adaptive)](https://starchart.cc/hamed-nasrollahi/HxTradeHelper)
+
+If this project helps your trading workflow, consider giving it a ⭐.
