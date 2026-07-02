@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
   { href: "/", label: "Overview" },
@@ -39,11 +40,8 @@ export default function Nav() {
             </Link>
           );
         })}
-        <button
-          onClick={logout}
-          className="ml-auto rounded-md px-3 py-1.5 text-sm"
-          style={{ color: "var(--ink-2)" }}
-        >
+        <ThemeToggle />
+        <button onClick={logout} className="rounded-md px-3 py-1.5 text-sm" style={{ color: "var(--ink-2)" }}>
           Logout
         </button>
       </div>

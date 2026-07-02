@@ -4,6 +4,7 @@
 
 /* Data-viz tokens: validated reference palette (light + dark selected). */
 :root {
+  color-scheme: light;
   --page: #f9f9f7;
   --surface-1: #fcfcfb;
   --ink-1: #0b0b0b;
@@ -30,8 +31,39 @@
   --s8: #eb6834;
 }
 
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --ink-1: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+
+  --pos: #3987e5;
+  --neg: #e66767;
+  --good-text: #0ca30c;
+  --bad-text: #e66767;
+
+  --s1: #3987e5;
+  --s2: #199e70;
+  --s3: #c98500;
+  --s4: #008300;
+  --s5: #9085e9;
+  --s6: #e66767;
+  --s7: #d55181;
+  --s8: #d95926;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
+    color-scheme: dark;
     --page: #0d0d0d;
     --surface-1: #1a1a19;
     --ink-1: #ffffff;
@@ -103,6 +135,11 @@ body {
   border-radius: 0.5rem;
   padding: 0.375rem 0.875rem;
   font-size: 0.875rem;
+}
+
+.btn-ghost:hover {
+  background: var(--page);
+  color: var(--ink-1);
 }
 
 .tnum {
