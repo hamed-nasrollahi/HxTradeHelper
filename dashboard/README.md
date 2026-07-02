@@ -58,7 +58,9 @@ The default image is
 or
 `DASHBOARD_IMAGE=ghcr.io/hamed-nasrollahi/hx-trade-dashboard:v1.0.0`
 to pin a specific dashboard version. Every published version also updates
-the `latest` tag to that same image.
+the `latest` tag to that same image. Publishing is manual through the
+**Publish dashboard Docker image** GitHub Action; enter the version you
+want to publish, matching `dashboard/package.json`.
 
 ## Journal import endpoint
 

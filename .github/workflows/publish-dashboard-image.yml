@@ -2,15 +2,11 @@ name: Publish dashboard Docker image
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - master
-    tags:
-      - "v*"
-    paths:
-      - "dashboard/**"
-      - ".github/workflows/publish-dashboard-image.yml"
+    inputs:
+      version:
+        description: "Dashboard version to publish, for example 1.0.0"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -32,19 +28,16 @@ jobs:
         id: version
         working-directory: dashboard
         run: |
-          VERSION="$(node -p "require('./package.json').version")"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "version_tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Dashboard version: ${VERSION}"
-
-      - name: Verify Git tag matches dashboard version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          GIT_TAG="${GITHUB_REF_NAME#v}"
-          if [ "$GIT_TAG" != "${{ steps.version.outputs.version }}" ]; then
-            echo "Git tag ${GITHUB_REF_NAME} does not match dashboard/package.json version ${{ steps.version.outputs.version }}"
+          INPUT_VERSION="${{ inputs.version }}"
+          INPUT_VERSION="${INPUT_VERSION#v}"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$INPUT_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Requested version ${INPUT_VERSION} does not match dashboard/package.json version ${PACKAGE_VERSION}"
             exit 1
           fi
+          echo "version=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=v${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Dashboard version: ${INPUT_VERSION}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
