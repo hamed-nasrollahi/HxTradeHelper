@@ -1,5 +1,6 @@
 services:
   dashboard:
+    image: ${DASHBOARD_IMAGE:-ghcr.io/hamed-nasrollahi/hx-trade-dashboard:latest}
     build: .
     restart: unless-stopped
     ports:

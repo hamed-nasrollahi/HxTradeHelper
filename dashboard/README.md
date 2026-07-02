@@ -43,6 +43,23 @@ docker compose up -d --build
 This starts the dashboard on <http://localhost:3000>, reading its DB
 connection, import API key and Basic Auth login from `.env`.
 
+To run the prebuilt GitHub Container Registry image instead of building
+from source:
+
+```
+cd dashboard
+cp .env.sample .env    # fill in HX_DB_* and the dashboard login
+docker compose -f docker-compose.image.yml up -d
+```
+
+The default image is
+`ghcr.io/hamed-nasrollahi/hx-trade-dashboard:latest`. Set
+`DASHBOARD_IMAGE=ghcr.io/hamed-nasrollahi/hx-trade-dashboard:1.0.0`
+or
+`DASHBOARD_IMAGE=ghcr.io/hamed-nasrollahi/hx-trade-dashboard:v1.0.0`
+to pin a specific dashboard version. Every published version also updates
+the `latest` tag to that same image.
+
 ## Journal import endpoint
 
 The MT5 indicator uploads through `HxTradeUploader.dll` to:

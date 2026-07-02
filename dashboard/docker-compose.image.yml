@@ -1,0 +1,12 @@
+services:
+  dashboard:
+    image: ${DASHBOARD_IMAGE:-ghcr.io/hamed-nasrollahi/hx-trade-dashboard:latest}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    volumes:
+      - dashboard-data:/app/data
+
+volumes:
+  dashboard-data:
