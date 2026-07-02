@@ -119,7 +119,7 @@ input double tradeRisk   = 1.0;              // Risk per trade (R)
 
 DialogHx  AppWindow;
 CButton  btnTabTrade, btnTabTest, btnTabJournal;
-CButton  btnJournal, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
+CButton  btnJournal, btnJournalAll, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
 btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc, btnReset;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
@@ -247,7 +247,8 @@ void PopulateTabs()
 
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,140,70);
-  CreateButton(btnCLR, "btnCLR", "CLR",10,80,140,100);
+  CreateButton(btnJournalAll, "btnJournalAll", "Export All",10,80,140,110);
+  CreateButton(btnCLR, "btnCLR", "CLR",10,120,140,140);
 }
 
 //+------------------------------------------------------------------+
@@ -297,6 +298,7 @@ void ApplyTabVisibility()
 
    // Journal tab
    ShowButton(btnJournal, journal);
+   ShowButton(btnJournalAll, journal);
    ShowButton(btnCLR, journal);
 }
 
@@ -697,6 +699,10 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       {
          ExportTodaysTrades();
       }
+      else if(sparam == "btnJournalAll")
+      {
+         ExportAllTrades();
+      }
       else if(sparam == "btnYesterday")
       {
          yesterdayEnable = ! yesterdayEnable;
@@ -886,7 +892,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
                Print("JSON sidecar written: ", jsonFile);
             }
 
-            MessageBox("Exported " + IntegerToString(n) + " trade(s) to:\nMQL5\\Files\\" + fileName, "Export Complete", MB_OK);
+            Alert("Export Complete: " + IntegerToString(n) + " trade(s) to MQL5\\Files\\" + fileName);
          }
       }
       else if(sparam == "btnReset")
@@ -1391,13 +1397,16 @@ bool SaveChartScreenshot(const string filepath, const ENUM_TIMEFRAMES timeframe,
 //+------------------------------------------------------------------+
 void ExportTodaysTrades()
 {
+   Print("Journal export started...");
+
    JournalTrade trades[];
    CollectTodaysTrades(trades);
 
    int total = ArraySize(trades);
    if(total == 0)
    {
-      MessageBox("No trades found for today.", "Journal Export", MB_OK);
+      // MessageBox is silently ignored in indicators - use Alert instead
+      Alert("Journal Export: no trades found for today.");
       return;
    }
 
@@ -1418,17 +1427,50 @@ void ExportTodaysTrades()
    if(UploadToApi)
       uploadNote = UploadTradesToApi(json) ? "\nUploaded to trade API." : "\nAPI upload failed - see Experts log.";
 
-   MessageBox(StringFormat("Exported %d trade(s) to:\nMQL5\\Files\\%s\n%d screenshot(s) captured.%s",
-              total, csvFile, shots, uploadNote), "Journal Export", MB_OK);
+   Alert(StringFormat("Journal Export: exported %d trade(s) to MQL5\\Files\\%s - %d screenshot(s) captured.%s",
+         total, csvFile, shots, uploadNote));
+}
+
+//+------------------------------------------------------------------+
+//| Export the whole account history: JSON + API upload, no shots.   |
+//| The payload is flagged skip_existing so the dashboard only       |
+//| inserts position ids it does not have yet.                       |
+//+------------------------------------------------------------------+
+void ExportAllTrades()
+{
+   Print("Full history export started...");
+
+   JournalTrade trades[];
+   CollectTrades(0, trades);
+
+   int total = ArraySize(trades);
+   if(total == 0)
+   {
+      Alert("Journal Export: no trades found in the account history.");
+      return;
+   }
+
+   string json = BuildTradesJson(trades, true);
+
+   string currentDate = TimeToString(TimeCurrent(), TIME_DATE);
+   WriteTradesJson(json, JournalBasePath, "all_" + currentDate);
+
+   string uploadNote = "";
+   if(UploadToApi)
+      uploadNote = UploadTradesToApi(json) ? " Uploaded to dashboard (existing position ids are skipped there)." : " API upload failed - see Experts log.";
+
+   Alert(StringFormat("Journal Export: %d trade(s) from full history written to MQL5\\Files\\%s.%s",
+         total, JournalBasePath + "\\trades_all_" + currentDate + ".json", uploadNote));
 }
 
 //+------------------------------------------------------------------+
 //| Build the JSON payload the trade API expects                     |
 //+------------------------------------------------------------------+
-string BuildTradesJson(JournalTrade &trades[])
+string BuildTradesJson(JournalTrade &trades[], const bool skipExisting = false)
 {
    string json = "{\"account\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))
                + ",\"export_time\":\"" + TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS) + "\""
+               + (skipExisting ? ",\"skip_existing\":true" : "")
                + ",\"trades\":[";
    for(int i = 0; i < ArraySize(trades); i++)
    {
@@ -1505,20 +1547,28 @@ bool UploadTradesToApi(const string json)
 //+------------------------------------------------------------------+
 void CollectTodaysTrades(JournalTrade &trades[])
 {
-   ArrayResize(trades, 0);
-
    datetime now = TimeCurrent();
    MqlDateTime dt = {};
    TimeToStruct(now, dt);
    dt.hour = 0;
    dt.min  = 0;
    dt.sec  = 0;
-   datetime dayStart = StructToTime(dt);
+   CollectTrades(StructToTime(dt), trades);
+}
 
-   // Find positions with at least one closing deal today
+//+------------------------------------------------------------------+
+//| Collect trades closed or opened since fromTime (0 = all history) |
+//+------------------------------------------------------------------+
+void CollectTrades(const datetime fromTime, JournalTrade &trades[])
+{
+   ArrayResize(trades, 0);
+
+   datetime now = TimeCurrent();
+
+   // Find positions with at least one closing deal in the window
    long closedIds[];
    ArrayResize(closedIds, 0);
-   if(HistorySelect(dayStart, now + 60))
+   if(HistorySelect(fromTime, now + 60))
    {
       int dealsTotal = HistoryDealsTotal();
       for(int i = 0; i < dealsTotal; i++)
@@ -1562,7 +1612,7 @@ void CollectTodaysTrades(JournalTrade &trades[])
       }
    }
 
-   // Positions opened today and still running
+   // Positions opened in the window and still running
    for(int i = 0; i < PositionsTotal(); i++)
    {
       ulong ticket = PositionGetTicket(i);
@@ -1585,7 +1635,7 @@ void CollectTodaysTrades(JournalTrade &trades[])
          continue;
 
       datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);
-      if(openTime < dayStart)
+      if(openTime < fromTime)
          continue;
 
       JournalTrade t;

@@ -52,11 +52,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "expected { account, trades[] }" }, { status: 400 });
     }
 
+    // Full-history exports set skip_existing so position ids already in the
+    // db are left untouched instead of being overwritten by the upsert
+    const skipExisting = payload?.skip_existing === true;
+    const existing = new Set<number>();
+    if (skipExisting) {
+      const rows = await query<{ position_id: number }>(
+        "SELECT position_id FROM trades WHERE account = ?",
+        [account]
+      );
+      for (const r of rows) existing.add(Number(r.position_id));
+    }
+
     let saved = 0;
+    let skipped = 0;
     for (const t of trades) {
       const openTime = mtTime(t.open_time);
       const positionId = Number(t.position_id);
       if (!openTime || !Number.isFinite(positionId)) continue;
+      if (skipExisting && existing.has(positionId)) {
+        skipped++;
+        continue;
+      }
       await query(UPSERT, [
         account,
         positionId,
@@ -75,7 +92,7 @@ export async function POST(req: NextRequest) {
       ]);
       saved++;
     }
-    return NextResponse.json({ saved });
+    return NextResponse.json(skipExisting ? { saved, skipped } : { saved });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "import failed" }, { status: 500 });
   }

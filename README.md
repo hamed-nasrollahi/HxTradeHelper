@@ -66,6 +66,18 @@ One click on **Export Journal**:
 4. **POSTs the JSON to the dashboard's import endpoint**, which upserts
    into MariaDB (re-exporting is safe; open trades update once they close)
 
+One click on **Export All** backfills the journal:
+
+1. Collects the **entire account trade history** (every closed position
+   plus currently open ones) — no screenshots, so it stays fast even for
+   large histories
+2. Writes `trades_all_<date>.json` to the `TradesHistory` folder
+3. POSTs the JSON to the dashboard flagged `skip_existing`, so **position
+   ids already in the database are left untouched** — existing rows (and
+   their strategy assignments) are never overwritten; only new trades are
+   inserted. The API response reports `saved` and `skipped` counts in the
+   Experts log.
+
 Output layout under `MQL5\Files`:
 
 ```
