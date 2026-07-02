@@ -15,6 +15,11 @@
 #include <Arrays\ArrayObj.mqh> // For dynamic object arrays
 #include "TradeElement.mqh"
 
+// .NET library (see dotnet/README.md): build HxTradeUploader.dll and put it
+// in MQL5\Libraries. Public static methods are imported as TradeUploader::...
+#import "HxTradeUploader.dll"
+#import
+
 // Base folder for storing screenshots
 input string JournalBasePath = "TradesHistory";
 
@@ -1081,7 +1086,7 @@ string BuildTradesJson(JournalTrade &trades[])
 }
 
 //+------------------------------------------------------------------+
-//| Write the JSON payload next to the CSV (api/uploader.py input)   |
+//| Write the JSON payload next to the CSV as a local record         |
 //+------------------------------------------------------------------+
 void WriteTradesJson(const string json, const string dayFolder, const string currentDate)
 {
@@ -1098,43 +1103,27 @@ void WriteTradesJson(const string json, const string dayFolder, const string cur
 }
 
 //+------------------------------------------------------------------+
-//| POST the trades to the API. Indicators cannot call WebRequest,   |
-//| in that case the JSON file stays as input for api/uploader.py    |
+//| POST the trades to the API through the .NET HxTradeUploader.dll. |
+//| DLL calls (unlike WebRequest) are allowed in indicators; enable  |
+//| "Allow DLL imports" in the terminal and the program properties   |
 //+------------------------------------------------------------------+
 bool UploadTradesToApi(const string json)
 {
    if(ApiUrl == "")
       return false;
 
-   char post[];
-   int len = StringToCharArray(json, post, 0, WHOLE_ARRAY, CP_UTF8) - 1;
-   ArrayResize(post, len); // drop the terminating zero
+   int status = TradeUploader::UploadJson(ApiUrl, ApiKey, json, 10000);
+   string response = TradeUploader::GetLastResponse();
 
-   string headers = "Content-Type: application/json\r\n";
-   if(ApiKey != "")
-      headers += "X-Api-Key: " + ApiKey + "\r\n";
-
-   char result[];
-   string resultHeaders;
-   ResetLastError();
-   int status = WebRequest("POST", ApiUrl, headers, 10000, post, result, resultHeaders);
-   if(status == -1)
-   {
-      int err = GetLastError();
-      if(err == 4014)
-         Print("API upload skipped: WebRequest is not allowed in indicators. Import the JSON with api/uploader.py instead.");
-      else
-         Print("API upload failed, error ", err, ". Make sure '", ApiUrl, "' is listed under Tools > Options > Expert Advisors > Allow WebRequest.");
-      return false;
-   }
-
-   string response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
    if(status >= 200 && status < 300)
    {
       Print("Trades uploaded to API: ", response);
       return true;
    }
-   Print("API returned HTTP ", status, ": ", response);
+   if(status == -1)
+      Print("API upload failed: ", response, ". Check that the API is running at '", ApiUrl, "'.");
+   else
+      Print("API returned HTTP ", status, ": ", response);
    return false;
 }
 

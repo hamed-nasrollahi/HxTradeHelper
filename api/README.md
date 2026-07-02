@@ -35,26 +35,12 @@ Small companion service that stores the journal exports produced by the
 ## Getting trades into the database
 
 The Journal button writes two machine-readable exports per day under
-`MQL5\Files\TradesHistory\<date>\`: `trades_<date>.csv` and
-`trades_<date>.json`.
-
-**Recommended: the uploader script.** MQL5 indicators are not allowed to
-call `WebRequest`, so run the uploader after your session (manually or as a
-scheduled task):
-
-```
-python uploader.py --files "C:\Users\<you>\AppData\Roaming\MetaQuotes\Terminal\<id>\MQL5\Files" --api http://127.0.0.1:8000/api/trades --api-key <key>
-```
-
-Each successfully uploaded export is marked with a `.uploaded` file next to
-it, so the script only sends new exports. Use `--force` to re-send.
-
-**Direct upload from the terminal.** The chart program also tries to POST
-the payload itself (inputs `ApiUrl`, `ApiKey`, `UploadToApi`). This only
-works if the program runs as an Expert Advisor, and the endpoint URL must be
-whitelisted in *Tools → Options → Expert Advisors → Allow WebRequest for
-listed URL*. When the terminal rejects the call, the JSON file is still
-written and the uploader picks it up.
+`MQL5\Files\TradesHistory\<date>\` (`trades_<date>.csv` and
+`trades_<date>.json`) and then POSTs the JSON payload to this API through
+the .NET `HxTradeUploader.dll` (inputs `ApiUrl`, `ApiKey`, `UploadToApi`).
+See `dotnet/README.md` for building and installing the DLL.
 
 Trades are upserted by `(account, position_id)`, so re-exporting the same
-day is safe: open trades are updated once they close.
+day is safe: open trades are updated once they close. If an upload fails,
+the JSON file remains on disk and is re-sent simply by clicking Journal
+again.
