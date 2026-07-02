@@ -6,7 +6,7 @@
 #property copyright "Copyright 2023, Hamed Nasrollahi."
 #property link      "https://github.com/hamed-nasrollahi"
 #property description "nasrollahi.hamed@gmail.com"
-#property version   "1.1"
+#property version   "1.2"
 #property strict
 
 
@@ -107,6 +107,24 @@ bool ma20Enable = false, ma60Enable = false, ma200Enable = false, statEnable = f
 
 int dialog_tab=0;
 int winTrades = 0, loseTrades=0;
+
+//+------------------------------------------------------------------+
+//| Journal trade record built from the account trade history        |
+//+------------------------------------------------------------------+
+struct JournalTrade
+{
+   long     positionId;
+   string   symbol;
+   string   type;        // "Buy" / "Sell"
+   datetime openTime;
+   datetime closeTime;   // 0 while the position is still open
+   double   entryPrice;
+   double   stopLoss;    // 0 if never set
+   double   takeProfit;  // 0 if never set
+   double   closePrice;  // 0 while the position is still open
+   double   profit;      // profit incl. swap and commission
+   bool     isOpen;
+};
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
@@ -325,26 +343,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
    {
       if(sparam == "btnJournal")
       {
-         string currentDate = TimeToString(current_time, TIME_DATE);
-         string tradeTime = TimeToString(current_time, TIME_MINUTES);
-         StringReplace(tradeTime, ":", "_");
-         string tradeFolder = tradeTime;
-         
-         // Build directory structure
-         string dayFolder = JournalBasePath + "\\" + currentDate;
-         string symbolFolder = dayFolder + "\\" + Symbol();
-         string tradeFolderPath = symbolFolder + "\\" + tradeFolder;
-         
-         if (CreateFolder(dayFolder, false) &&
-            CreateFolder(symbolFolder, false) &&
-            CreateFolder(tradeFolderPath, false))
-         {
-            CaptureScreenshots(tradeFolderPath);
-         }
-         else
-         {
-            Print("Error creating folder structure.");
-         }
+         ExportTodaysTrades();
       }
       else if(sparam == "btnYesterday")
       {
@@ -989,11 +988,15 @@ void CaptureScreenshots(const string folder)
 //+------------------------------------------------------------------+
 //| Save chart screenshot                                            |
 //+------------------------------------------------------------------+
-bool SaveChartScreenshot(const string filepath, const ENUM_TIMEFRAMES timeframe)
+bool SaveChartScreenshot(const string filepath, const ENUM_TIMEFRAMES timeframe, const long chartId = 0)
 {
    string filename = filepath + "\\" + EnumToString(timeframe) + ".png";
-   if (ChartScreenShot(0, filename, 1920*2, 1080))
+   if (ChartScreenShot(chartId, filename, 1920*2, 1080))
    {
+      // screenshot commands are queued on the chart, wait until the file
+      // shows up before the caller closes the chart
+      uint start = GetTickCount();
+      while(!FileIsExist(filename) && GetTickCount() - start < 2000) {}
       Print("Screenshot saved: ", filename);
       return true;
    }
@@ -1001,6 +1004,373 @@ bool SaveChartScreenshot(const string filepath, const ENUM_TIMEFRAMES timeframe)
    {
       Print("Error saving screenshot: ", filename);
       return false;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Export today's trades: CSV summary + clean screenshots           |
+//+------------------------------------------------------------------+
+void ExportTodaysTrades()
+{
+   JournalTrade trades[];
+   CollectTodaysTrades(trades);
+
+   int total = ArraySize(trades);
+   if(total == 0)
+   {
+      MessageBox("No trades found for today.", "Journal Export", MB_OK);
+      return;
+   }
+
+   string currentDate = TimeToString(TimeCurrent(), TIME_DATE);
+   string dayFolder = JournalBasePath + "\\" + currentDate;
+   if(!CreateFolder(dayFolder, false))
+   {
+      Print("Error creating folder structure.");
+      return;
+   }
+
+   string csvFile = WriteTradesCsv(trades, dayFolder, currentDate);
+   int shots = CaptureTradeScreenshots(trades, dayFolder);
+
+   MessageBox(StringFormat("Exported %d trade(s) to:\nMQL5\\Files\\%s\n%d screenshot(s) captured.",
+              total, csvFile, shots), "Journal Export", MB_OK);
+}
+
+//+------------------------------------------------------------------+
+//| Collect today's trades from history and open positions           |
+//+------------------------------------------------------------------+
+void CollectTodaysTrades(JournalTrade &trades[])
+{
+   ArrayResize(trades, 0);
+
+   datetime now = TimeCurrent();
+   MqlDateTime dt = {};
+   TimeToStruct(now, dt);
+   dt.hour = 0;
+   dt.min  = 0;
+   dt.sec  = 0;
+   datetime dayStart = StructToTime(dt);
+
+   // Find positions with at least one closing deal today
+   long closedIds[];
+   ArrayResize(closedIds, 0);
+   if(HistorySelect(dayStart, now + 60))
+   {
+      int dealsTotal = HistoryDealsTotal();
+      for(int i = 0; i < dealsTotal; i++)
+      {
+         ulong deal = HistoryDealGetTicket(i);
+         if(deal == 0)
+            continue;
+         long dealType = HistoryDealGetInteger(deal, DEAL_TYPE);
+         if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL)
+            continue;
+         long entry = HistoryDealGetInteger(deal, DEAL_ENTRY);
+         if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_INOUT && entry != DEAL_ENTRY_OUT_BY)
+            continue;
+         long posId = HistoryDealGetInteger(deal, DEAL_POSITION_ID);
+         bool known = false;
+         for(int k = 0; k < ArraySize(closedIds); k++)
+         {
+            if(closedIds[k] == posId)
+            {
+               known = true;
+               break;
+            }
+         }
+         if(!known)
+         {
+            int sz = ArraySize(closedIds);
+            ArrayResize(closedIds, sz + 1);
+            closedIds[sz] = posId;
+         }
+      }
+   }
+
+   for(int i = 0; i < ArraySize(closedIds); i++)
+   {
+      JournalTrade t;
+      if(BuildTradeFromHistory(closedIds[i], t))
+      {
+         int sz = ArraySize(trades);
+         ArrayResize(trades, sz + 1);
+         trades[sz] = t;
+      }
+   }
+
+   // Positions opened today and still running
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      long posId = (long)PositionGetInteger(POSITION_IDENTIFIER);
+
+      // a partially closed position is already in the list - just flag it as still open
+      bool found = false;
+      for(int k = 0; k < ArraySize(trades); k++)
+      {
+         if(trades[k].positionId == posId)
+         {
+            trades[k].isOpen = true;
+            found = true;
+            break;
+         }
+      }
+      if(found)
+         continue;
+
+      datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);
+      if(openTime < dayStart)
+         continue;
+
+      JournalTrade t;
+      t.positionId = posId;
+      t.symbol     = PositionGetString(POSITION_SYMBOL);
+      t.type       = ((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? "Buy" : "Sell";
+      t.openTime   = openTime;
+      t.closeTime  = 0;
+      t.entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      t.stopLoss   = PositionGetDouble(POSITION_SL);
+      t.takeProfit = PositionGetDouble(POSITION_TP);
+      t.closePrice = 0;
+      t.profit     = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      t.isOpen     = true;
+      int sz = ArraySize(trades);
+      ArrayResize(trades, sz + 1);
+      trades[sz] = t;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Build a trade record from the deals of a closed position         |
+//+------------------------------------------------------------------+
+bool BuildTradeFromHistory(const long positionId, JournalTrade &t)
+{
+   if(!HistorySelectByPosition(positionId))
+      return false;
+
+   t.positionId = positionId;
+   t.symbol     = "";
+   t.type       = "";
+   t.openTime   = 0;
+   t.closeTime  = 0;
+   t.entryPrice = 0;
+   t.stopLoss   = 0;
+   t.takeProfit = 0;
+   t.closePrice = 0;
+   t.profit     = 0;
+   t.isOpen     = false;
+
+   bool haveIn = false;
+   int dealsTotal = HistoryDealsTotal();
+   for(int i = 0; i < dealsTotal; i++)
+   {
+      ulong deal = HistoryDealGetTicket(i);
+      if(deal == 0)
+         continue;
+      long dealType = HistoryDealGetInteger(deal, DEAL_TYPE);
+      if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL)
+         continue;
+
+      t.profit += HistoryDealGetDouble(deal, DEAL_PROFIT)
+                + HistoryDealGetDouble(deal, DEAL_SWAP)
+                + HistoryDealGetDouble(deal, DEAL_COMMISSION);
+
+      // deals carry the position SL/TP that was active at execution time
+      double dealSl = HistoryDealGetDouble(deal, DEAL_SL);
+      double dealTp = HistoryDealGetDouble(deal, DEAL_TP);
+      if(dealSl > 0)
+         t.stopLoss = dealSl;
+      if(dealTp > 0)
+         t.takeProfit = dealTp;
+
+      long entry = HistoryDealGetInteger(deal, DEAL_ENTRY);
+      if(entry == DEAL_ENTRY_IN && !haveIn)
+      {
+         haveIn = true;
+         t.symbol     = HistoryDealGetString(deal, DEAL_SYMBOL);
+         t.type       = (dealType == DEAL_TYPE_BUY) ? "Buy" : "Sell";
+         t.openTime   = (datetime)HistoryDealGetInteger(deal, DEAL_TIME);
+         t.entryPrice = HistoryDealGetDouble(deal, DEAL_PRICE);
+      }
+      else if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT || entry == DEAL_ENTRY_OUT_BY)
+      {
+         t.closeTime  = (datetime)HistoryDealGetInteger(deal, DEAL_TIME);
+         t.closePrice = HistoryDealGetDouble(deal, DEAL_PRICE);
+      }
+   }
+   return haveIn;
+}
+
+//+------------------------------------------------------------------+
+//| Win / Lose / BreakEven / Open                                    |
+//+------------------------------------------------------------------+
+string FormatTradeResult(const JournalTrade &t)
+{
+   if(t.isOpen)
+      return "Open";
+   if(t.profit > 0)
+      return "Win";
+   if(t.profit < 0)
+      return "Lose";
+   return "BreakEven";
+}
+
+//+------------------------------------------------------------------+
+//| Planned R:R from entry / SL / TP distances                       |
+//+------------------------------------------------------------------+
+string FormatTradeRR(const JournalTrade &t)
+{
+   if(t.stopLoss <= 0 || t.takeProfit <= 0)
+      return "";
+   double risk   = MathAbs(t.entryPrice - t.stopLoss);
+   double reward = MathAbs(t.takeProfit - t.entryPrice);
+   if(risk <= 0)
+      return "";
+   return StringFormat("1:%.2f", reward / risk);
+}
+
+//+------------------------------------------------------------------+
+//| Write today's trades to a CSV file                               |
+//+------------------------------------------------------------------+
+string WriteTradesCsv(JournalTrade &trades[], const string dayFolder, const string currentDate)
+{
+   string fileName = dayFolder + "\\trades_" + currentDate + ".csv";
+   int fh = FileOpen(fileName, FILE_WRITE | FILE_ANSI | FILE_CSV, ',');
+   if(fh == INVALID_HANDLE)
+   {
+      Print("Journal export: failed to open file ", fileName, "  error=", GetLastError());
+      return fileName;
+   }
+
+   FileWrite(fh, "Trade #", "Symbol", "Type", "Result", "R:R", "Entry Price", "SL", "TP", "Close Price", "Profit", "Open Date", "Open Time", "Close Date", "Close Time", "Position ID");
+   for(int i = 0; i < ArraySize(trades); i++)
+   {
+      int digits = (int)SymbolInfoInteger(trades[i].symbol, SYMBOL_DIGITS);
+      FileWrite(fh, i + 1,
+                trades[i].symbol,
+                trades[i].type,
+                FormatTradeResult(trades[i]),
+                FormatTradeRR(trades[i]),
+                DoubleToString(trades[i].entryPrice, digits),
+                trades[i].stopLoss   > 0 ? DoubleToString(trades[i].stopLoss, digits)   : "",
+                trades[i].takeProfit > 0 ? DoubleToString(trades[i].takeProfit, digits) : "",
+                trades[i].isOpen ? "" : DoubleToString(trades[i].closePrice, digits),
+                DoubleToString(trades[i].profit, 2),
+                TimeToString(trades[i].openTime, TIME_DATE),
+                TimeToString(trades[i].openTime, TIME_SECONDS),
+                trades[i].isOpen ? "" : TimeToString(trades[i].closeTime, TIME_DATE),
+                trades[i].isOpen ? "" : TimeToString(trades[i].closeTime, TIME_SECONDS),
+                trades[i].positionId);
+   }
+   FileClose(fh);
+   Print("Trades exported to: ", TerminalInfoString(TERMINAL_DATA_PATH), "\\MQL5\\Files\\", fileName);
+   return fileName;
+}
+
+//+------------------------------------------------------------------+
+//| Capture H1 / M5 / M1 clean screenshots for every trade           |
+//+------------------------------------------------------------------+
+int CaptureTradeScreenshots(JournalTrade &trades[], const string dayFolder)
+{
+   ENUM_TIMEFRAMES timeframes[] = {PERIOD_H1, PERIOD_M5, PERIOD_M1};
+   int saved = 0;
+
+   for(int i = 0; i < ArraySize(trades); i++)
+   {
+      string symbolFolder = dayFolder + "\\" + trades[i].symbol;
+      string tradeTime = TimeToString(trades[i].openTime, TIME_MINUTES);
+      StringReplace(tradeTime, ":", "_");
+      string tradeFolder = symbolFolder + "\\" + tradeTime + "_" + IntegerToString(trades[i].positionId);
+
+      if(!CreateFolder(symbolFolder, false) || !CreateFolder(tradeFolder, false))
+      {
+         Print("Error creating folder structure for trade ", trades[i].positionId);
+         continue;
+      }
+
+      for(int j = 0; j < ArraySize(timeframes); j++)
+      {
+         if(CaptureCleanScreenshot(trades[i].symbol, timeframes[j], trades[i].openTime, tradeFolder))
+            saved++;
+      }
+   }
+   return saved;
+}
+
+//+------------------------------------------------------------------+
+//| Screenshot on a freshly opened chart: no user objects on it      |
+//+------------------------------------------------------------------+
+bool CaptureCleanScreenshot(const string symbol, const ENUM_TIMEFRAMES timeframe, const datetime tradeTime, const string folder)
+{
+   SymbolSelect(symbol, true);
+   WaitForChartData(symbol, timeframe);
+
+   long chartId = ChartOpen(symbol, timeframe);
+   if(chartId <= 0)
+   {
+      Print("Failed to open ", symbol, " ", EnumToString(timeframe), " chart. Error ", GetLastError());
+      return false;
+   }
+
+   ApplyCleanChartLook(chartId);
+
+   // scroll so the trade bar is visible with some bars of context after it
+   int barIndex = iBarShift(symbol, timeframe, tradeTime);
+   if(barIndex >= 0)
+   {
+      int shift = -(barIndex - 20);
+      if(shift > 0)
+         shift = 0;
+      ChartNavigate(chartId, CHART_END, shift);
+   }
+
+   ChartSetInteger(chartId, CHART_BRING_TO_TOP, true);
+   ChartRedraw(chartId);
+
+   bool ok = SaveChartScreenshot(folder, timeframe, chartId);
+   ChartClose(chartId);
+   return ok;
+}
+
+//+------------------------------------------------------------------+
+//| Same black & white scheme btnJournal used on the main chart      |
+//+------------------------------------------------------------------+
+void ApplyCleanChartLook(const long chartId)
+{
+   ChartSetInteger(chartId, CHART_MODE, CHART_CANDLES);
+   ChartSetInteger(chartId, CHART_COLOR_BACKGROUND, clrWhite);
+   ChartSetInteger(chartId, CHART_COLOR_FOREGROUND, clrBlack);
+   ChartSetInteger(chartId, CHART_COLOR_CHART_UP, clrBlack);
+   ChartSetInteger(chartId, CHART_COLOR_CHART_DOWN, clrBlack);
+   ChartSetInteger(chartId, CHART_COLOR_CANDLE_BULL, clrWhite);
+   ChartSetInteger(chartId, CHART_COLOR_CANDLE_BEAR, clrBlack);
+   ChartSetInteger(chartId, CHART_COLOR_CHART_LINE, clrBlack);
+   ChartSetInteger(chartId, CHART_SHOW_GRID, false);
+   ChartSetInteger(chartId, CHART_SHOW_VOLUMES, CHART_VOLUME_HIDE);
+   ChartSetInteger(chartId, CHART_SHOW_TRADE_LEVELS, false);
+   ChartSetInteger(chartId, CHART_SHOW_OHLC, false);
+   ChartSetInteger(chartId, CHART_SHOW_ONE_CLICK, false);
+   ChartSetInteger(chartId, CHART_SHIFT, false);
+   ChartSetInteger(chartId, CHART_AUTOSCROLL, false);
+   // the default template may carry objects of its own
+   ObjectsDeleteAll(chartId, -1, -1);
+}
+
+//+------------------------------------------------------------------+
+//| Make sure symbol/timeframe history is built before the shot      |
+//+------------------------------------------------------------------+
+void WaitForChartData(const string symbol, const ENUM_TIMEFRAMES timeframe)
+{
+   // Sleep() is not available in indicators, so poll on the clock instead
+   uint start = GetTickCount();
+   while(GetTickCount() - start < 2000)
+   {
+      if(SeriesInfoInteger(symbol, timeframe, SERIES_SYNCHRONIZED))
+         break;
+      iBars(symbol, timeframe); // trigger history download/build
    }
 }
 
