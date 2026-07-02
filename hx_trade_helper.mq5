@@ -202,27 +202,27 @@ void PopulateTabs()
   CreateButton(btnH4OB, "btnH4OB", "H4OB",77,250,140,270);
   CreateButton(btnH1OB, "btnH1OB", "H1OB",10,280,73,300);
   CreateButton(btnSROB, "btnSROB", "SROB",77,280,140,300);
-  CreateButton(btnSell, "btnSell", "Sell",10,310,73,330);
-  CreateButton(btnBuy, "btnBuy", "Buy",77,310,140,330);
-  CreateButton(btnMA20, "btnMA20", "M20",10,340,73,360);
-  CreateButton(btnCLR, "btnCLR", "CLR",77,340,140,360);
-  CreateButton(btnMA60, "btnMA60", "M60",10,370,73,390);
-  CreateButton(btnMA200, "btnMA200", "M200",77,370,140,390);
-  CreateButton(btnFib1, "btnFib1", "Fib1",10,400,73,420);
-  CreateButton(btnFib2, "btnFib2", "Fib2",77,400,140,420);
+  CreateButton(btnMA20, "btnMA20", "M20",10,310,52,330);
+  CreateButton(btnMA60, "btnMA60", "M60",54,310,96,330);
+  CreateButton(btnMA200, "btnMA200", "M200",98,310,140,330);
+  CreateButton(btnFib1, "btnFib1", "Fib1",10,340,73,360);
+  CreateButton(btnFib2, "btnFib2", "Fib2",77,340,140,360);
 
   // Back test tab
-  CreateButton(btnLB, "btnLB", "L-B",10,40,73,60);
-  CreateButton(btnWB, "btnWB", "W-B",77,40,140,60);
-  CreateButton(btnLS, "btnLS", "L-S",10,70,73,90);
-  CreateButton(btnWS, "btnWS", "W-S",77,70,140,90);
-  CreateButton(btnEnbl, "btnEnbl", "Stats",10,100,140,120);
-  CreateButton(btnReset, "btnReset", "Rst",10,130,73,150);
-  CreateButton(btnReCalc, "btnReCalc", "CLC",77,130,140,150);
-  CreateButton(btnExp, "btnExp", "Export",10,160,140,180);
+  CreateButton(btnSell, "btnSell", "Sell",10,40,73,60);
+  CreateButton(btnBuy, "btnBuy", "Buy",77,40,140,60);
+  CreateButton(btnLB, "btnLB", "L-B",10,70,73,90);
+  CreateButton(btnWB, "btnWB", "W-B",77,70,140,90);
+  CreateButton(btnLS, "btnLS", "L-S",10,100,73,120);
+  CreateButton(btnWS, "btnWS", "W-S",77,100,140,120);
+  CreateButton(btnEnbl, "btnEnbl", "Stats",10,130,140,150);
+  CreateButton(btnReset, "btnReset", "Rst",10,160,73,180);
+  CreateButton(btnReCalc, "btnReCalc", "CLC",77,160,140,180);
+  CreateButton(btnExp, "btnExp", "Export",10,190,140,210);
 
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,140,70);
+  CreateButton(btnCLR, "btnCLR", "CLR",10,80,140,100);
 }
 
 //+------------------------------------------------------------------+
@@ -252,16 +252,15 @@ void ApplyTabVisibility()
    ShowButton(btnH4OB, trade);
    ShowButton(btnH1OB, trade);
    ShowButton(btnSROB, trade);
-   ShowButton(btnSell, trade);
-   ShowButton(btnBuy, trade);
    ShowButton(btnMA20, trade);
-   ShowButton(btnCLR, trade);
    ShowButton(btnMA60, trade);
    ShowButton(btnMA200, trade);
    ShowButton(btnFib1, trade);
    ShowButton(btnFib2, trade);
 
    // Back test tab
+   ShowButton(btnSell, test);
+   ShowButton(btnBuy, test);
    ShowButton(btnLB, test);
    ShowButton(btnWB, test);
    ShowButton(btnLS, test);
@@ -273,6 +272,7 @@ void ApplyTabVisibility()
 
    // Journal tab
    ShowButton(btnJournal, journal);
+   ShowButton(btnCLR, journal);
 }
 
 void ShowButton(CButton &btn, const bool visible)
