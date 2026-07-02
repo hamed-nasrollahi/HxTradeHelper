@@ -16,6 +16,14 @@ The panel is an MQL5 indicator (`hx_trade_helper.mq5`) with three tabs:
 | **Test** | Manual back-testing markers and statistics |
 | **Jrnl** | End-of-day journal export |
 
+## Screenshots
+
+![Trade tab with reference levels and fib tools](assets/screenshots/trade-tab.svg)
+
+![Test tab with manual back-testing controls](assets/screenshots/test-tab.svg)
+
+![Journal tab export controls](assets/screenshots/journal-tab.svg)
+
 ## Features
 
 ### Trade tab

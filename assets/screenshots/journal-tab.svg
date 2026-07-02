@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="688" height="490" viewBox="0 0 688 490" role="img" aria-labelledby="title desc">
+  <title id="title">HxTradeHelper Journal tab</title>
+  <desc id="desc">Sample MetaTrader chart with the Hx Helper journal panel and export controls.</desc>
+  <rect width="688" height="490" fill="#000"/>
+  <line x1="0" y1="232" x2="531" y2="232" stroke="#6d8ba8"/>
+  <path d="M0 98 C28 93 31 61 58 83 S101 145 130 123 151 92 174 111 224 114 235 92 273 85 300 107 316 150 342 126" stroke="#f00" fill="none"/>
+  <path d="M0 134 C35 122 58 114 91 120 S158 146 193 124 253 101 290 95 318 103 350 115" stroke="#001dff" fill="none"/>
+  <path d="M0 386 C80 364 139 348 208 326 S286 307 351 306" stroke="#d5a600" fill="none"/>
+  <g stroke-width="2">
+    <g stroke="#00ff00" fill="#00ff00">
+      <line x1="15" y1="0" x2="15" y2="98"/><rect x="12" y="16" width="8" height="79"/>
+      <line x1="36" y1="15" x2="36" y2="143"/><rect x="33" y="74" width="8" height="59"/>
+      <line x1="116" y1="0" x2="116" y2="132"/><rect x="113" y="3" width="8" height="108"/>
+      <line x1="181" y1="0" x2="181" y2="116"/><rect x="178" y="0" width="8" height="95"/>
+      <line x1="286" y1="0" x2="286" y2="119"/><rect x="283" y="12" width="8" height="98"/>
+      <line x1="334" y1="205" x2="334" y2="276"/><rect x="331" y="212" width="8" height="49"/>
+      <line x1="348" y1="160" x2="348" y2="305"/><rect x="345" y="211" width="8" height="55"/>
+    </g>
+    <g stroke="#ffff00" fill="#ffff00">
+      <line x1="7" y1="0" x2="7" y2="137"/><rect x="4" y="35" width="8" height="75"/>
+      <line x1="48" y1="16" x2="48" y2="159"/><rect x="45" y="90" width="8" height="57"/>
+      <line x1="151" y1="75" x2="151" y2="256"/><rect x="148" y="103" width="8" height="113"/>
+      <line x1="247" y1="112" x2="247" y2="278"/><rect x="244" y="143" width="8" height="89"/>
+      <line x1="323" y1="180" x2="323" y2="271"/><rect x="320" y="205" width="8" height="46"/>
+    </g>
+  </g>
+  <g transform="translate(530,15)" font-family="Arial, sans-serif" font-size="12">
+    <rect width="150" height="468" fill="#f3f3f3" stroke="#aaa"/>
+    <text x="6" y="17" fill="#222">Hx Helper</text><text x="112" y="18" fill="#777" font-weight="bold">-</text><text x="133" y="18" fill="#999" font-weight="bold">x</text>
+    <g fill="#dbe5f1" stroke="#b5c2d1">
+      <rect x="14" y="34" width="44" height="20"/><rect x="62" y="34" width="37" height="20"/><rect x="104" y="34" width="35" height="20"/>
+      <rect x="14" y="66" width="130" height="28"/><rect x="14" y="110" width="130" height="28"/><rect x="14" y="154" width="130" height="20"/>
+    </g>
+    <g fill="#111" text-anchor="middle">
+      <text x="36" y="49">Trade</text><text x="80" y="49">Test</text><text x="121" y="49">Jrnl</text>
+      <text x="79" y="84">Export Journal</text><text x="79" y="128">Export All</text><text x="79" y="169">CLR</text>
+    </g>
+  </g>
+</svg>
