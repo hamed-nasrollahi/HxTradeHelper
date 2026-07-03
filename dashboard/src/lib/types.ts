@@ -98,3 +98,10 @@ export interface TradeFilters {
   strategyId?: string; // number, or "none" for unassigned
   direction?: string; // Buy / Sell
 }
+
+export interface NewsEvent {
+  title: string;
+  country: string; // currency code, e.g. "USD"
+  date: string; // ISO 8601, UTC
+  impact: string; // High / Medium
+}

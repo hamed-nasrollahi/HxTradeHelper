@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { loadSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -37,14 +36,11 @@ ON DUPLICATE KEY UPDATE
 /**
  * Receives the journal payload the MT5 indicator uploads through
  * HxTradeUploader.dll and upserts it keyed by (account, position_id).
+ * Authenticated by src/middleware.ts (X-Api-Key, since the indicator has
+ * no session cookie).
  */
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = loadSettings().importApiKey;
-    if (apiKey && req.headers.get("x-api-key") !== apiKey) {
-      return NextResponse.json({ error: "invalid api key" }, { status: 401 });
-    }
-
     const payload = await req.json().catch(() => null);
     const account = Number(payload?.account);
     const trades = Array.isArray(payload?.trades) ? payload.trades : null;

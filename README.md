@@ -2,6 +2,7 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/hamed-nasrollahi/HxTradeHelper?style=social)](https://github.com/hamed-nasrollahi/HxTradeHelper/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/hamed-nasrollahi/HxTradeHelper?style=social)](https://github.com/hamed-nasrollahi/HxTradeHelper/network/members)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
 
 A MetaTrader 5 chart panel for intraday traders: reference levels and
 session tools for live trading, a manual back-testing workflow with
@@ -12,9 +13,13 @@ The panel is an MQL5 indicator (`hx_trade_helper.mq5`) with three tabs:
 
 | Tab | Purpose |
 |-----|---------|
-| **Trade** | Chart preparation and live-trading tools |
-| **Test** | Manual back-testing markers and statistics |
-| **Jrnl** | End-of-day journal export |
+| **TR** (Trade) | Chart preparation and live-trading tools |
+| **TE** (Test) | Manual back-testing markers and statistics |
+| **JR** (Journal) | End-of-day journal export |
+
+The panel is a narrow, two-column layout (tool buttons are at most two per
+row); the TR/TE/JR tab selectors are colored separately from the rest so
+they stand out as navigation rather than tools.
 
 ## Screenshots
 
@@ -37,15 +42,17 @@ The panel is an MQL5 indicator (`hx_trade_helper.mq5`) with three tabs:
 - **Sessions** — Tokyo/London/New York vertical session lines plus
   countdown labels (open/close timers), and a candle-close countdown and
   spread display (input toggles)
-- **News countdown** — optionally fetches the ForexFactory weekly
-  calendar (through the uploader DLL), keeps only orange/red-impact
-  events for your currencies, and shows a corner countdown to the next
-  event — switching to a LIVE remaining-time display while the event is
-  in progress
+- **News countdown** — optionally fetches the weekly calendar from the
+  dashboard's `/api/news` (through the uploader DLL; the dashboard itself
+  caches and refreshes from ForexFactory at most once an hour), keeps only
+  orange/red-impact events for your currencies, and shows a corner
+  countdown to the next event — switching to a LIVE remaining-time display
+  while the event is in progress
 - **Order blocks** — one-click rectangles for daily / H4 / H1 /
   support-resistance zones
 - **Moving averages** — EMA 20/60/200 toggles
-- **Fib tools** — two fib variants with SL/E/TP1..TP7 levels
+- **Fib tools** — three fib variants (dark gray, orange, gray) with
+  SL/E/TP1..TP7 levels
 
 ### Test tab (manual back-testing)
 
@@ -162,10 +169,11 @@ Experts log).
 | `ApiKey` | *(empty)* | Sent as `X-Api-Key` header when set |
 | `UploadToApi` | `true` | POST the journal to the dashboard after export |
 | `showCandleTime` / `showSessions` / `showSlipage` | `false` | Candle-close countdown, session timers, spread label (1-second timer starts only if one is enabled) |
-| `ShowNews` | `false` | Fetch the ForexFactory calendar and show the red/orange event countdown |
+| `ShowNews` | `false` | Fetch the calendar and show the red/orange event countdown |
 | `NewsCurrencies` | *(empty)* | CSV currency filter for events; empty = the chart symbol's base and profit currencies |
 | `NewsWindowMinutes` | 2 | Countdown appears when the next event is within this window |
 | `NewsDurationMinutes` | 15 | How long an event stays "LIVE" after its release time |
+| `NewsFeedUrl` | `https://trade.hamex.ee/api/news` | Dashboard news endpoint (`?currencies=` is appended automatically) |
 | `Level1/2/3` | 1.25 / 2.50 / 5.00 | Round-number grid steps (price units) |
 | `ATR_Period` | 14 | Daily ATR period for the bands |
 | `SummerTime` | `false` | DST adjustment for session times |
@@ -185,6 +193,13 @@ inputs as well.
   SL/TP recorded on the deals.
 - MQL5 indicators may not call `WebRequest`, which is why the upload goes
   through the native DLL instead.
+
+## License
+
+[CC BY-NC-SA 4.0](LICENSE) — free for personal, non-commercial use. If you
+modify and redistribute the code, you must credit Hamed Nasrollahi and
+keep derivatives under the same license. Commercial use requires
+permission from the author.
 
 ## Stargazers over time
 

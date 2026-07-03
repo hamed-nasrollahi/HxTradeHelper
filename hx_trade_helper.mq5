@@ -3,8 +3,8 @@
 //|                                Copyright 2024, Hamed Nasrollahi. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2023, Hamed Nasrollahi."
-#property link      "https://github.com/hamed-nasrollahi"
+#property copyright "Copyright 2023, Hamed Nasrollahi. CC BY-NC-SA 4.0"
+#property link      "https://github.com/hamed-nasrollahi/HxTradeHelper"
 #property description "nasrollahi.hamed@gmail.com"
 #property version   "1.2"
 #property strict
@@ -15,6 +15,7 @@
 
 #include "DialogHx.mqh"
 #include <Controls\Button.mqh>
+#include <Controls\Label.mqh>
 #include <Arrays\ArrayObj.mqh> // For dynamic object arrays
 #include "TradeElement.mqh"
 
@@ -22,7 +23,7 @@
 // publish HxTradeUploader.dll and put it in MQL5\Libraries
 #import "HxTradeUploader.dll"
 int UploadJson(string apiUrl, string apiKey, string json, int timeoutMs);
-int HttpGet(string url, int timeoutMs);
+int HttpGet(string url, string apiKey, int timeoutMs);
 int GetLastResponse(string &buffer, int capacity);
 #import
 
@@ -35,16 +36,17 @@ input string ApiKey = "";                                 // Import API key (X-A
 input bool UploadToApi = true;                            // Upload today's trades to the dashboard
 
 
-input bool showCandleTime = false;
+input bool showCandleTime = true;
 input bool showSessions = false;
-input bool showSlipage = false;
+input bool showSlipage = true;
 
-// ForexFactory news (fetched through HxTradeUploader.dll)
-input bool ShowNews = false;              // Fetch ForexFactory calendar (orange + red events)
-input string NewsCurrencies = "";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
+// News calendar (fetched through HxTradeUploader.dll from the dashboard's
+// /api/news, which itself caches/refreshes the ForexFactory feed hourly)
+input bool ShowNews = false;              // Fetch calendar (orange + red events)
+input string NewsCurrencies = "USD";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
 input int NewsWindowMinutes = 2;          // Show countdown when the next event is within this window
 input int NewsDurationMinutes = 15;       // How long an event counts as "in progress" after release
-input string NewsFeedUrl = "https://nfs.faireconomy.media/ff_calendar_thisweek.json";
+input string NewsFeedUrl = "http://127.0.0.1:3000/api/news"; // Dashboard news endpoint
 
 input bool SummerTime = false;
 
@@ -120,7 +122,8 @@ input double tradeRisk   = 1.0;              // Risk per trade (R)
 DialogHx  AppWindow;
 CButton  btnTabTrade, btnTabTest, btnTabJournal;
 CButton  btnJournal, btnJournalAll, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
-btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc, btnReset;
+btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc, btnReset;
+CLabel   lblRepo;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
 yesterdayEnable = false, atrEnable = true, lastWeekMapEnable = false;
@@ -179,10 +182,10 @@ int OnInit()
       Print("Error: Cannot create base directory: ", JournalBasePath);
    }
    
-   int chartWidth = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0) - 160;
+   int chartWidth = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0) - 120;
    //--- create application dialog
    CleanAppWindows();
-   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+150,570))
+   if(!AppWindow.Create(0,"Hx Helper",0,chartWidth,100,chartWidth+110,630))
       return(INIT_FAILED);
 
 
@@ -205,50 +208,67 @@ int OnInit()
 
 void PopulateTabs()
 {
-  // Tab selectors, always visible
-  CreateButton(btnTabTrade, "btnTabTrade", "Trade",10,10,55,32);
-  CreateButton(btnTabTest, "btnTabTest", "Test",58,10,98,32);
-  CreateButton(btnTabJournal, "btnTabJournal", "Jrnl",101,10,140,32);
+  // Tab selectors, always visible - not subject to the 2-per-row rule, and
+  // colored to stand out from the ordinary tool buttons below them
+  CreateButton(btnTabTrade, "btnTabTrade", "TR",10,10,38,32);
+  CreateButton(btnTabTest, "btnTabTest", "TE",41,10,69,32);
+  CreateButton(btnTabJournal, "btnTabJournal", "JR",72,10,100,32);
   btnTabTrade.Locking(true);
   btnTabTest.Locking(true);
   btnTabJournal.Locking(true);
+  btnTabTrade.ColorBackground(clrSteelBlue);
+  btnTabTest.ColorBackground(clrSteelBlue);
+  btnTabJournal.ColorBackground(clrSteelBlue);
+  btnTabTrade.Color(clrWhite);
+  btnTabTest.Color(clrWhite);
+  btnTabJournal.Color(clrWhite);
 
   // Trade tab
-  CreateButton(btnYesterday, "btnYesterday", "Yesterday",10,40,140,60);
-  CreateButton(btnDayBefore, "btnDayBefore", "Day Before",10,70,140,90);
-  CreateButton(btnLastWeek, "btnLastWeek", "Last Week",10,100,140,120);
-  CreateButton(btnWeeklyMap, "btnWeeklyMap", "Week Map",10,130,140,150);
-  CreateButton(btnLevel1, "btnLevel1", "L1",10,160,73,180);
-  CreateButton(btnLevel2, "btnLevel2", "L2",77,160,140,180);
-  CreateButton(btnLevel3, "btnLevel3", "L3",10,190,73,210);
-  CreateButton(btnATR, "btnATR", "ATR",77,190,140,210);
-  CreateButton(btnSessions, "btnSessions", "Sessions",10,220,140,240);
-  CreateButton(btnDOB, "btnDOB", "DOB",10,250,73,270);
-  CreateButton(btnH4OB, "btnH4OB", "H4OB",77,250,140,270);
-  CreateButton(btnH1OB, "btnH1OB", "H1OB",10,280,73,300);
-  CreateButton(btnSROB, "btnSROB", "SROB",77,280,140,300);
-  CreateButton(btnMA20, "btnMA20", "M20",10,310,52,330);
-  CreateButton(btnMA60, "btnMA60", "M60",54,310,96,330);
-  CreateButton(btnMA200, "btnMA200", "M200",98,310,140,330);
-  CreateButton(btnFib1, "btnFib1", "Fib1",10,340,73,360);
-  CreateButton(btnFib2, "btnFib2", "Fib2",77,340,140,360);
+  CreateButton(btnYesterday, "btnYesterday", "Yesterday",10,40,100,60);
+  CreateButton(btnDayBefore, "btnDayBefore", "Day Before",10,70,100,90);
+  CreateButton(btnLastWeek, "btnLastWeek", "Last Week",10,100,100,120);
+  CreateButton(btnWeeklyMap, "btnWeeklyMap", "Week Map",10,130,100,150);
+  CreateButton(btnLevel1, "btnLevel1", "L1",10,160,53,180);
+  CreateButton(btnLevel2, "btnLevel2", "L2",57,160,100,180);
+  CreateButton(btnLevel3, "btnLevel3", "L3",10,190,53,210);
+  CreateButton(btnATR, "btnATR", "ATR",57,190,100,210);
+  CreateButton(btnSessions, "btnSessions", "Sessions",10,220,100,240);
+  CreateButton(btnDOB, "btnDOB", "DOB",10,250,53,270);
+  CreateButton(btnH4OB, "btnH4OB", "H4OB",57,250,100,270);
+  CreateButton(btnH1OB, "btnH1OB", "H1OB",10,280,53,300);
+  CreateButton(btnSROB, "btnSROB", "SROB",57,280,100,300);
+  CreateButton(btnMA20, "btnMA20", "M20",10,310,53,330);
+  CreateButton(btnMA60, "btnMA60", "M60",57,310,100,330);
+  CreateButton(btnMA200, "btnMA200", "M200",10,340,100,360);
+  CreateButton(btnFib1, "btnFib1", "Fib1",10,370,53,390);
+  CreateButton(btnFib2, "btnFib2", "Fib2",57,370,100,390);
+  CreateButton(btnFib3, "btnFib3", "Fib3",10,400,100,420);
 
   // Back test tab
-  CreateButton(btnSell, "btnSell", "Sell",10,40,73,60);
-  CreateButton(btnBuy, "btnBuy", "Buy",77,40,140,60);
-  CreateButton(btnLB, "btnLB", "L-B",10,70,73,90);
-  CreateButton(btnWB, "btnWB", "W-B",77,70,140,90);
-  CreateButton(btnLS, "btnLS", "L-S",10,100,73,120);
-  CreateButton(btnWS, "btnWS", "W-S",77,100,140,120);
-  CreateButton(btnEnbl, "btnEnbl", "Stats",10,130,140,150);
-  CreateButton(btnReset, "btnReset", "Rst",10,160,73,180);
-  CreateButton(btnReCalc, "btnReCalc", "CLC",77,160,140,180);
-  CreateButton(btnExp, "btnExp", "Export",10,190,140,210);
+  CreateButton(btnSell, "btnSell", "Sell",10,40,53,60);
+  CreateButton(btnBuy, "btnBuy", "Buy",57,40,100,60);
+  CreateButton(btnLB, "btnLB", "L-B",10,70,53,90);
+  CreateButton(btnWB, "btnWB", "W-B",57,70,100,90);
+  CreateButton(btnLS, "btnLS", "L-S",10,100,53,120);
+  CreateButton(btnWS, "btnWS", "W-S",57,100,100,120);
+  CreateButton(btnEnbl, "btnEnbl", "Stats",10,130,100,150);
+  CreateButton(btnReset, "btnReset", "Rst",10,160,53,180);
+  CreateButton(btnReCalc, "btnReCalc", "CLC",57,160,100,180);
+  CreateButton(btnExp, "btnExp", "Export",10,190,100,210);
 
   // Journal tab
-  CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,140,70);
-  CreateButton(btnJournalAll, "btnJournalAll", "Export All",10,80,140,110);
-  CreateButton(btnCLR, "btnCLR", "CLR",10,120,140,140);
+  CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,100,70);
+  CreateButton(btnJournalAll, "btnJournalAll", "Export All",10,80,100,110);
+  CreateButton(btnCLR, "btnCLR", "CLR",10,120,100,140);
+
+  // Footer credit, always visible regardless of the active tab. Full URL
+  // is on the tooltip since the panel is too narrow for it to fit as text
+  lblRepo.Create(0, "lblRepo", 0, 20, 485, 100, 500);
+  lblRepo.Text("HxTradeHelper");
+  lblRepo.FontSize(7);
+  lblRepo.Color(clrSteelBlue);
+  AppWindow.Add(lblRepo);
+  ObjectSetString(0, "lblRepo", OBJPROP_TOOLTIP, "https://github.com/hamed-nasrollahi/HxTradeHelper");
 }
 
 //+------------------------------------------------------------------+
@@ -283,6 +303,7 @@ void ApplyTabVisibility()
    ShowButton(btnMA200, trade);
    ShowButton(btnFib1, trade);
    ShowButton(btnFib2, trade);
+   ShowButton(btnFib3, trade);
 
    // Back test tab
    ShowButton(btnSell, test);
@@ -368,25 +389,13 @@ void UpdateNews()
 }
 
 //+------------------------------------------------------------------+
-//| Download the weekly ForexFactory calendar and keep orange/red    |
-//| events for the configured currencies                             |
+//| Ask the dashboard for its cached calendar (it fetches/refreshes  |
+//| from ForexFactory itself, at most once an hour) and keep         |
+//| orange/red events for the configured currencies                  |
 //+------------------------------------------------------------------+
 void FetchNewsEvents()
 {
    lastNewsFetch = TimeGMT();
-
-   int status = HttpGet(NewsFeedUrl, 10000);
-   string body;
-   StringInit(body, 262144);
-   int len = GetLastResponse(body, 262144);
-   body = StringSubstr(body, 0, len);
-
-   if(status != 200)
-   {
-      Print("News fetch failed (HTTP ", status, "): ", StringSubstr(body, 0, 200));
-      lastNewsFetch = TimeGMT() - 3600 + 600; // retry in 10 minutes
-      return;
-   }
 
    string filterCsv = NewsCurrencies;
    if(filterCsv == "")
@@ -399,6 +408,24 @@ void FetchNewsEvents()
    {
       StringTrimLeft(filters[i]);
       StringTrimRight(filters[i]);
+   }
+
+   // The dashboard also filters server-side (fewer bytes over the wire),
+   // but the client-side match below stays as a defensive second pass
+   string sep = (StringFind(NewsFeedUrl, "?") >= 0) ? "&" : "?";
+   string url = NewsFeedUrl + sep + "currencies=" + filterCsv;
+
+   int status = HttpGet(url, ApiKey, 10000);
+   string body;
+   StringInit(body, 262144);
+   int len = GetLastResponse(body, 262144);
+   body = StringSubstr(body, 0, len);
+
+   if(status != 200)
+   {
+      Print("News fetch failed (HTTP ", status, "): ", StringSubstr(body, 0, 200));
+      lastNewsFetch = TimeGMT() - 3600 + 600; // retry in 10 minutes
+      return;
    }
 
    ArrayResize(newsEvents, 0);
@@ -444,7 +471,7 @@ void FetchNewsEvents()
       newsEvents[sz].title = JsonField(obj, "title");
       newsEvents[sz].isRed = isRed;
    }
-   PrintFormat("ForexFactory calendar: %d orange/red event(s) for %s", ArraySize(newsEvents), filterCsv);
+   PrintFormat("News calendar: %d orange/red event(s) for %s", ArraySize(newsEvents), filterCsv);
 }
 
 //+------------------------------------------------------------------+
@@ -1076,6 +1103,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          ObjectsDeleteAll(0, "SR-OB_", 0, OBJ_RECTANGLE);
          ObjectsDeleteAll(0, "Fib1_", 0, OBJ_FIBO);
          ObjectsDeleteAll(0, "Fib2_", 0, OBJ_FIBO);
+         ObjectsDeleteAll(0, "Fib3_", 0, OBJ_FIBO);
          ObjectsDeleteAll(0, "WB_", 0, OBJ_FIBO);
          ObjectsDeleteAll(0, "WS_", 0, OBJ_FIBO);
          ObjectsDeleteAll(0, "LB_", 0, OBJ_FIBO);
@@ -1106,6 +1134,19 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          double price_top = iHigh(NULL, 0, middleBar);
          double price_bottom = iLow(NULL, 0, middleBar);
          CreateFibo("Fib2_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrOrange, time_start, price_top, time_end, price_bottom);
+      }
+      else if(sparam == "btnFib3")
+      {
+         long firstVisibleBar, visibleBars;
+         ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
+         ChartGetInteger(0, CHART_VISIBLE_BARS, 0, visibleBars);
+         long middleBar = firstVisibleBar - (visibleBars / 2);
+
+         datetime time_start = iTime(NULL, 0, middleBar + 5);
+         datetime time_end = iTime(NULL, 0, middleBar);
+         double price_top = iHigh(NULL, 0, middleBar);
+         double price_bottom = iLow(NULL, 0, middleBar);
+         CreateFibo("Fib3_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrGray, time_start, price_top, time_end, price_bottom);
       }
    }
     

@@ -86,11 +86,31 @@ re-import.
 
 Dashboard settings persist in the `dashboard-data` volume.
 
+## News calendar endpoint
+
+```
+GET /api/news?currencies=USD,EUR
+```
+
+Returns a flat JSON array of orange/red-impact ForexFactory events
+(`title`, `country`, `date`, `impact`), shaped like ForexFactory's own feed
+so the indicator can parse it identically. Omit `currencies` to get every
+cached event. The dashboard caches the calendar in `news_events` and only
+re-fetches ForexFactory (`NEWS_FEED_URL`, default
+`https://nfs.faireconomy.media/ff_calendar_thisweek.json`) when the cache
+is missing or older than an hour (tracked in `news_fetch_log`) — so any
+number of indicator instances polling this endpoint only cost ForexFactory
+one request per hour. Set the indicator's `NewsFeedUrl` input to
+`http://<dashboard-host>:3000/api/news`. Unlike `/api/import`, this
+endpoint is unauthenticated (no `X-Api-Key`) since it only serves public
+calendar data.
+
 When the dashboard connects with a restricted DB user, uncomment/adjust
 the `GRANT` lines at the bottom of `sql/dashboard.sql` (it needs `SELECT,
-INSERT, UPDATE, DELETE` on `strategies` and `SELECT, UPDATE` on `trades`).
-Connection details can also be changed at runtime on the **Settings** page
-(*Test connection*, then *Save*).
+INSERT, UPDATE, DELETE` on `strategies`, `SELECT, UPDATE` on `trades`,
+`SELECT, INSERT, DELETE` on `news_events` and `SELECT, INSERT, UPDATE` on
+`news_fetch_log`). Connection details can also be changed at runtime on
+the **Settings** page (*Test connection*, then *Save*).
 
 ## Configuration
 
@@ -110,6 +130,7 @@ initial defaults only:
 | `DASHBOARD_USER` | `admin` — Basic Auth login |
 | `DASHBOARD_PASSWORD` | `admin` — Basic Auth password |
 | `DATA_DIR` | `/app/data` (where settings.json lives) |
+| `NEWS_FEED_URL` | `https://nfs.faireconomy.media/ff_calendar_thisweek.json` — ForexFactory feed `/api/news` fetches from |
 
 Copy `.env.sample` to `.env` and fill in real values; `.env` is gitignored
 and both `next dev`/`next start` and Docker Compose (`env_file`) read it.
@@ -130,7 +151,7 @@ Point the Settings page (or `HX_DB_*` env vars) at any MariaDB with the
 | Script | Purpose |
 |--------|---------|
 | `sql/db-init.sql` | Base `trades` table — only for a brand-new database |
-| `sql/dashboard.sql` | Dashboard additions: `strategies` table, `trades.strategy_id` FK, indexes. Idempotent — safe to re-run on an existing database |
+| `sql/dashboard.sql` | Dashboard additions: `strategies` table, `trades.strategy_id` FK, `news_events`/`news_fetch_log` tables, indexes. Idempotent — safe to re-run on an existing database |
 
 ## How the statistics are defined
 
@@ -153,7 +174,9 @@ Every page and API route requires signing in at `/login` with
 `src/middleware.ts`) — change the default `admin`/`admin` before exposing
 the dashboard; changing them also invalidates existing sessions. The only
 exception is `POST /api/import`, which the MT5 uploader authenticates
-with its own `X-Api-Key`. The login form sends credentials in cleartext,
+with its own `X-Api-Key`, and `GET /api/news`, which serves only the
+public ForexFactory calendar and needs no credentials. The login form
+sends credentials in cleartext,
 so put the dashboard behind HTTPS (reverse proxy) when it is reachable
 from the internet. The Settings page writes DB credentials to the
 server-side data volume only.

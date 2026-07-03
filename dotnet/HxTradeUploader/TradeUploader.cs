@@ -60,19 +60,23 @@ public static class TradeUploader
     }
 
     /// <summary>
-    /// HTTP GET the given URL (used for the ForexFactory calendar feed).
+    /// HTTP GET the given URL (used for the dashboard's news feed).
     /// Returns the HTTP status code, or -1 when the request could not be
     /// sent. The body (or error message) is read via GetLastResponse.
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "HttpGet")]
-    public static int HttpGet(IntPtr urlPtr, int timeoutMs)
+    public static int HttpGet(IntPtr urlPtr, IntPtr apiKeyPtr, int timeoutMs)
     {
         lastResponse = "";
         try
         {
             string url = Marshal.PtrToStringUni(urlPtr) ?? "";
+            string apiKey = Marshal.PtrToStringUni(apiKeyPtr) ?? "";
             using var cts = new System.Threading.CancellationTokenSource(timeoutMs);
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrEmpty(apiKey))
+                request.Headers.Add("X-Api-Key", apiKey);
+
             using HttpResponseMessage response = Client.Send(request, cts.Token);
             using var reader = new System.IO.StreamReader(response.Content.ReadAsStream(cts.Token), Encoding.UTF8);
             lastResponse = reader.ReadToEnd();

@@ -71,6 +71,15 @@ function LoginForm() {
             {error}
           </p>
         ) : null}
+        <a
+          className="mt-5 block text-center text-xs"
+          style={{ color: "var(--ink-muted)" }}
+          href="https://github.com/hamed-nasrollahi/HxTradeHelper"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          github.com/hamed-nasrollahi/HxTradeHelper
+        </a>
       </form>
     </div>
   );

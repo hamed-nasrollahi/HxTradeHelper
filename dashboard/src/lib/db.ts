@@ -18,6 +18,7 @@ export async function getPool(): Promise<mysql.Pool> {
       database: s.database,
       connectionLimit: 5,
       dateStrings: true,
+      timezone: "Z", // store/read DATETIME columns as UTC, matching the indicator's TimeGMT()
     });
     poolKey = key;
   }
