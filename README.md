@@ -203,6 +203,6 @@ permission from the author.
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/hamed-nasrollahi/HxTradeHelper.svg?variant=adaptive)](https://starchart.cc/hamed-nasrollahi/HxTradeHelper)
+[![Star History Chart](https://api.star-history.com/svg?repos=hamed-nasrollahi/HxTradeHelper&type=Date)](https://star-history.com/#hamed-nasrollahi/HxTradeHelper&Date)
 
 If this project helps your trading workflow, consider giving it a ⭐.
