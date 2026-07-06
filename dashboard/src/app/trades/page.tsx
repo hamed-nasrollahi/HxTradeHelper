@@ -51,6 +51,56 @@ export default function TradesPage() {
     }
   };
 
+  const setReviewFlag = async (trade: TradeRecord, field: "entry_correct" | "exit_correct", value: boolean) => {
+    const otherCorrect = !!(field === "entry_correct" ? trade.exit_correct : trade.entry_correct);
+    const clearsMistake = value && otherCorrect;
+    const patch: Record<string, unknown> = {
+      [field === "entry_correct" ? "entryCorrect" : "exitCorrect"]: value,
+    };
+    if (clearsMistake) patch.mistakeId = null;
+    setSaving(trade.id);
+    try {
+      await sendJSON(`/api/trades/${trade.id}`, "PATCH", patch);
+      setTrades((ts) =>
+        ts.map((t) =>
+          t.id === trade.id
+            ? {
+                ...t,
+                [field]: value ? 1 : 0,
+                ...(clearsMistake ? { mistake_id: null, mistake_name: null } : {}),
+              }
+            : t
+        )
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const setMistake = async (trade: TradeRecord, mistakeId: string) => {
+    setSaving(trade.id);
+    try {
+      await sendJSON(`/api/trades/${trade.id}`, "PATCH", { mistakeId: mistakeId || null });
+      setTrades((ts) =>
+        ts.map((t) =>
+          t.id === trade.id
+            ? {
+                ...t,
+                mistake_id: mistakeId ? Number(mistakeId) : null,
+                mistake_name: meta.mistakes.find((m) => String(m.id) === mistakeId)?.name || null,
+              }
+            : t
+        )
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(null);
+    }
+  };
+
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Trades</h1>
@@ -76,6 +126,9 @@ export default function TradesPage() {
               <th className="px-3 py-2 text-right font-medium">R:R</th>
               <th className="px-3 py-2 text-right font-medium">Profit</th>
               <th className="px-3 py-2 font-medium">Strategy</th>
+              <th className="px-3 py-2 text-center font-medium">Entry OK</th>
+              <th className="px-3 py-2 text-center font-medium">Exit OK</th>
+              <th className="px-3 py-2 font-medium">Mistake</th>
             </tr>
           </thead>
           <tbody>
@@ -121,11 +174,44 @@ export default function TradesPage() {
                     ))}
                   </select>
                 </td>
+                <td className="px-3 py-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={!!t.entry_correct}
+                    disabled={saving === t.id}
+                    onChange={(e) => setReviewFlag(t, "entry_correct", e.target.checked)}
+                  />
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={!!t.exit_correct}
+                    disabled={saving === t.id}
+                    onChange={(e) => setReviewFlag(t, "exit_correct", e.target.checked)}
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <select
+                    className="input"
+                    value={t.mistake_id ? String(t.mistake_id) : ""}
+                    disabled={saving === t.id || (!!t.entry_correct && !!t.exit_correct)}
+                    onChange={(e) => setMistake(t, e.target.value)}
+                  >
+                    <option value="">
+                      {t.entry_correct && t.exit_correct ? "-" : "Select mistake"}
+                    </option>
+                    {meta.mistakes.map((m) => (
+                      <option key={m.id} value={String(m.id)}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
               </tr>
             ))}
             {trades.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center" colSpan={11} style={{ color: "var(--ink-muted)" }}>
+                <td className="px-4 py-6 text-center" colSpan={14} style={{ color: "var(--ink-muted)" }}>
                   No trades in this range
                 </td>
               </tr>

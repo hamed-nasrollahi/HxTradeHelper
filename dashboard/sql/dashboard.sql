@@ -52,3 +52,29 @@ CREATE TABLE IF NOT EXISTS news_fetch_log (
 -- GRANT SELECT, INSERT, DELETE ON hx_trades.news_events TO 'hx'@'localhost';
 -- GRANT SELECT, INSERT, UPDATE ON hx_trades.news_fetch_log TO 'hx'@'localhost';
 -- FLUSH PRIVILEGES;
+
+-- Trade review: was the entry/exit correct, and if not, which recurring
+-- mistake caused it. entry_correct/exit_correct default to 1 (assumed fine)
+-- until reviewed on the Trades page.
+CREATE TABLE IF NOT EXISTS mistakes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(64)  NOT NULL,
+    description TEXT         DEFAULT NULL,
+    created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_mistake_name (name)
+) ENGINE = InnoDB;
+
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS entry_correct TINYINT(1) NOT NULL DEFAULT 1;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS exit_correct TINYINT(1) NOT NULL DEFAULT 1;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS mistake_id INT DEFAULT NULL;
+
+-- Deleting a mistake unassigns any trades tagged with it instead of deleting them
+ALTER TABLE trades
+    ADD CONSTRAINT fk_trades_mistake
+    FOREIGN KEY IF NOT EXISTS (mistake_id) REFERENCES mistakes (id)
+    ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_trades_mistake ON trades (mistake_id);
+
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON hx_trades.mistakes TO 'hx'@'localhost';
+-- FLUSH PRIVILEGES;

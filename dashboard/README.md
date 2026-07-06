@@ -14,8 +14,9 @@ Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 |------|--------------|
 | **Overview** | KPI tiles + equity curve + monthly P/L. Metrics: net profit, win rate, profit factor, expectancy, avg win/loss, payoff ratio, avg planned R:R, biggest win/loss (with symbol and date), max drawdown, win/loss streaks, trades per day |
 | **Breakdown** | Group the same filtered stats by strategy, month, ISO week, symbol, day of week, hour of day, or direction — chart plus full table |
-| **Trades** | Filterable trade list; assign a strategy to each trade inline |
+| **Trades** | Filterable trade list; assign a strategy to each trade inline, and review entry/exit correctness with a mistake tag |
 | **Strategies** | Create/edit/delete strategies (name, description, color) with per-strategy quick stats |
+| **Mistakes** | Create/edit/delete recurring-mistake tags (name, description) with a count of tagged trades |
 | **Settings** | MariaDB host/port/database/username/password with a test-connection button, plus the journal import API key |
 
 Every page shares the same filter row (date range, symbol, strategy,
@@ -29,7 +30,7 @@ service). One-time database preparation:
 
 ```
 mysql -u root -p <your-db> < sql/db-init.sql     # base trades table (new DB only)
-mysql -u root -p <your-db> < sql/dashboard.sql   # strategies table + strategy_id
+mysql -u root -p <your-db> < sql/dashboard.sql   # strategies + mistakes tables, trade review columns
 ```
 
 Then:
@@ -107,10 +108,10 @@ calendar data.
 
 When the dashboard connects with a restricted DB user, uncomment/adjust
 the `GRANT` lines at the bottom of `sql/dashboard.sql` (it needs `SELECT,
-INSERT, UPDATE, DELETE` on `strategies`, `SELECT, UPDATE` on `trades`,
-`SELECT, INSERT, DELETE` on `news_events` and `SELECT, INSERT, UPDATE` on
-`news_fetch_log`). Connection details can also be changed at runtime on
-the **Settings** page (*Test connection*, then *Save*).
+INSERT, UPDATE, DELETE` on `strategies` and `mistakes`, `SELECT, UPDATE` on
+`trades`, `SELECT, INSERT, DELETE` on `news_events` and `SELECT, INSERT,
+UPDATE` on `news_fetch_log`). Connection details can also be changed at
+runtime on the **Settings** page (*Test connection*, then *Save*).
 
 ## Configuration
 
@@ -151,7 +152,7 @@ Point the Settings page (or `HX_DB_*` env vars) at any MariaDB with the
 | Script | Purpose |
 |--------|---------|
 | `sql/db-init.sql` | Base `trades` table — only for a brand-new database |
-| `sql/dashboard.sql` | Dashboard additions: `strategies` table, `trades.strategy_id` FK, `news_events`/`news_fetch_log` tables, indexes. Idempotent — safe to re-run on an existing database |
+| `sql/dashboard.sql` | Dashboard additions: `strategies` table, `trades.strategy_id` FK, `mistakes` table, `trades.entry_correct`/`exit_correct`/`mistake_id` review columns, `news_events`/`news_fetch_log` tables, indexes. Idempotent — safe to re-run on an existing database |
 
 ## How the statistics are defined
 

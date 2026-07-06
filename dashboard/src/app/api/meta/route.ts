@@ -14,9 +14,16 @@ export async function GET() {
     } catch {
       // strategies table not created yet - dashboard still works read-only
     }
+    let mistakes: any[] = [];
+    try {
+      mistakes = await query("SELECT id, name FROM mistakes ORDER BY name");
+    } catch {
+      // mistakes table not created yet - dashboard still works read-only
+    }
     return NextResponse.json({
       symbols: symbols.map((r) => r.symbol),
       strategies,
+      mistakes,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "query failed" }, { status: 500 });
