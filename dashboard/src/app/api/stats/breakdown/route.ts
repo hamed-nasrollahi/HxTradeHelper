@@ -9,10 +9,12 @@ const DIMENSIONS: GroupDimension[] = [
   "strategy",
   "symbol",
   "month",
+  "monthOfYear",
   "week",
   "weekday",
   "hour",
   "direction",
+  "mistake",
 ];
 
 export async function GET(req: NextRequest) {

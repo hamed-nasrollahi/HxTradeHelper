@@ -98,10 +98,12 @@ export type GroupDimension =
   | "strategy"
   | "symbol"
   | "month"
+  | "monthOfYear"
   | "week"
   | "weekday"
   | "hour"
-  | "direction";
+  | "direction"
+  | "mistake";
 
 export interface TradeFilters {
   from?: string;
