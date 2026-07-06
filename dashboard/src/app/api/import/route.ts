@@ -49,15 +49,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Full-history exports set skip_existing so position ids already in the
-    // db are left untouched instead of being overwritten by the upsert
+    // db are left untouched instead of being overwritten by the upsert.
+    // Exception: a trade stored as open gets updated when the payload has it
+    // closed, so positions closed while the uploader was offline still sync.
     const skipExisting = payload?.skip_existing === true;
-    const existing = new Set<number>();
+    const existingOpen = new Map<number, boolean>(); // position_id -> is_open in db
     if (skipExisting) {
-      const rows = await query<{ position_id: number }>(
-        "SELECT position_id FROM trades WHERE account = ?",
+      const rows = await query<{ position_id: number; is_open: number }>(
+        "SELECT position_id, is_open FROM trades WHERE account = ?",
         [account]
       );
-      for (const r of rows) existing.add(Number(r.position_id));
+      for (const r of rows) existingOpen.set(Number(r.position_id), !!Number(r.is_open));
     }
 
     let saved = 0;
@@ -66,9 +68,12 @@ export async function POST(req: NextRequest) {
       const openTime = mtTime(t.open_time);
       const positionId = Number(t.position_id);
       if (!openTime || !Number.isFinite(positionId)) continue;
-      if (skipExisting && existing.has(positionId)) {
-        skipped++;
-        continue;
+      if (skipExisting && existingOpen.has(positionId)) {
+        const closesOpenTrade = existingOpen.get(positionId) === true && !t.is_open;
+        if (!closesOpenTrade) {
+          skipped++;
+          continue;
+        }
       }
       await query(UPSERT, [
         account,
