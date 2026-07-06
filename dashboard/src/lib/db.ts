@@ -106,9 +106,11 @@ const TRADE_SELECT = `
 SELECT t.id, t.account, t.position_id, t.symbol, t.type, t.result, t.rr,
        t.entry_price, t.stop_loss, t.take_profit, t.close_price, t.profit,
        t.open_time, t.close_time, t.is_open, t.strategy_id,
-       s.name AS strategy_name, s.color AS strategy_color
+       s.name AS strategy_name, s.color AS strategy_color,
+       t.entry_correct, t.exit_correct, t.mistake_id, m.name AS mistake_name
 FROM trades t
-LEFT JOIN strategies s ON s.id = t.strategy_id`;
+LEFT JOIN strategies s ON s.id = t.strategy_id
+LEFT JOIN mistakes m ON m.id = t.mistake_id`;
 
 export async function fetchTrades(params: URLSearchParams, closedOnly: boolean): Promise<TradeRecord[]> {
   const { where, args } = buildTradeWhere(params, closedOnly);

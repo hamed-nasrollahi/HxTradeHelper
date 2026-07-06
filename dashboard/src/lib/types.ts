@@ -17,6 +17,10 @@ export interface TradeRecord {
   strategy_id: number | null;
   strategy_name: string | null;
   strategy_color: string | null;
+  entry_correct: number; // 1 = correct trade to open, 0 = mistake
+  exit_correct: number; // 1 = closed correctly, 0 = mistake
+  mistake_id: number | null;
+  mistake_name: string | null;
 }
 
 export interface Strategy {
@@ -25,6 +29,14 @@ export interface Strategy {
   description: string | null;
   color: string;
   created_at: string;
+}
+
+export interface Mistake {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+  trade_count: number;
 }
 
 export interface TradeExtreme {

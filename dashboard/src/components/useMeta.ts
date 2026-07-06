@@ -6,10 +6,11 @@ import { getJSON } from "@/lib/client";
 export interface Meta {
   symbols: string[];
   strategies: { id: number; name: string; color: string }[];
+  mistakes: { id: number; name: string }[];
 }
 
 export function useMeta(): { meta: Meta; error: string | null; reload: () => void } {
-  const [meta, setMeta] = useState<Meta>({ symbols: [], strategies: [] });
+  const [meta, setMeta] = useState<Meta>({ symbols: [], strategies: [], mistakes: [] });
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
