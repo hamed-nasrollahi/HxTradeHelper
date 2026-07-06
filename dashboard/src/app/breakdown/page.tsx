@@ -11,11 +11,13 @@ import { BreakdownGroup, GroupDimension, TradeFilters } from "@/lib/types";
 const DIMENSIONS: { value: GroupDimension; label: string }[] = [
   { value: "strategy", label: "Strategy" },
   { value: "month", label: "Month" },
+  { value: "monthOfYear", label: "Month of year" },
   { value: "week", label: "Week" },
   { value: "symbol", label: "Symbol" },
   { value: "weekday", label: "Day of week" },
   { value: "hour", label: "Hour of day" },
   { value: "direction", label: "Direction" },
+  { value: "mistake", label: "Mistake" },
 ];
 
 export default function BreakdownPage() {

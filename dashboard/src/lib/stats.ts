@@ -7,6 +7,9 @@ import {
 } from "./types";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 
 function num(v: unknown): number {
   const n = Number(v);
@@ -156,6 +159,10 @@ function groupKey(t: TradeRecord, dim: GroupDimension): { key: string; label: st
       return { key: t.symbol, label: t.symbol };
     case "month":
       return { key: time.slice(0, 7), label: time.slice(0, 7) };
+    case "monthOfYear": {
+      const m = time.slice(5, 7); // "01".."12", aggregated across years
+      return { key: m, label: MONTHS[Number(m) - 1] };
+    }
     case "week": {
       const wk = isoWeekKey(time);
       return { key: wk, label: wk };
@@ -170,6 +177,10 @@ function groupKey(t: TradeRecord, dim: GroupDimension): { key: string; label: st
     }
     case "direction":
       return { key: t.type, label: t.type };
+    case "mistake":
+      return t.mistake_id
+        ? { key: `m${t.mistake_id}`, label: t.mistake_name || `#${t.mistake_id}` }
+        : { key: "none", label: "No mistake" };
   }
 }
 
@@ -221,7 +232,7 @@ export function computeBreakdown(trades: TradeRecord[], dim: GroupDimension): Br
   }
 
   // Time-like and cyclic dimensions sort by key; entity dimensions by net P/L
-  if (dim === "month" || dim === "week" || dim === "hour") {
+  if (dim === "month" || dim === "monthOfYear" || dim === "week" || dim === "hour") {
     result.sort((a, b) => a.key.localeCompare(b.key));
   } else if (dim === "weekday") {
     result.sort((a, b) => WEEKDAYS.indexOf(a.key) - WEEKDAYS.indexOf(b.key));
