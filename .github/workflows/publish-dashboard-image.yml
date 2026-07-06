@@ -9,7 +9,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 env:
@@ -24,7 +24,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get dashboard version
+      # If the requested version differs from dashboard/package.json, bump the
+      # package files and push the commit back to the dispatched branch so the
+      # published image and the repo stay in sync without a manual bump.
+      - name: Sync dashboard version
         id: version
         working-directory: dashboard
         run: |
@@ -32,11 +35,17 @@ jobs:
           INPUT_VERSION="${INPUT_VERSION#v}"
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
           if [ "$INPUT_VERSION" != "$PACKAGE_VERSION" ]; then
-            echo "Requested version ${INPUT_VERSION} does not match dashboard/package.json version ${PACKAGE_VERSION}"
-            exit 1
+            echo "Bumping dashboard/package.json from ${PACKAGE_VERSION} to ${INPUT_VERSION}"
+            npm version "$INPUT_VERSION" --no-git-tag-version
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json
+            git commit -m "bump dashboard version to ${INPUT_VERSION}"
+            git push origin "HEAD:${{ github.ref_name }}"
           fi
           echo "version=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "version_tag=v${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "Dashboard version: ${INPUT_VERSION}"
 
       - name: Set up Docker Buildx
@@ -66,7 +75,7 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_tag }}
-            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:sha-${{ steps.version.outputs.sha }}
             ${{ env.IMAGE_NAME }}:latest
           labels: |
             org.opencontainers.image.title=HxTradeHelper Dashboard
