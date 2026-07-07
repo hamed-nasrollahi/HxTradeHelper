@@ -13,7 +13,7 @@ Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 | Page | What it does |
 |------|--------------|
 | **Overview** | KPI tiles + equity curve + monthly P/L. Metrics: net profit, win rate, profit factor, expectancy, avg win/loss, payoff ratio, avg planned R:R, biggest win/loss (with symbol and date), max drawdown, win/loss streaks, trades per day |
-| **Breakdown** | Group the same filtered stats by strategy, month, month of year (seasonality across years), ISO week, symbol, day of week, hour of day, direction, or mistake tag — chart plus full table; optionally exclude trades with entry or exit marked wrong |
+| **Breakdown** | Group the same filtered stats by strategy, month, month of year (seasonality across years), ISO week, symbol, day of week, hour of day, direction, or mistake tag — chart plus full table; optionally add a second "then by" dimension for a combined breakdown (e.g. strategy, then hour of day), and optionally exclude trades with entry or exit marked wrong |
 | **Trades** | Filterable trade list; assign a strategy to each trade inline, and review entry/exit correctness with a mistake tag |
 | **Strategies** | Create/edit/delete strategies (name, description, color) with per-strategy quick stats |
 | **Mistakes** | Create/edit/delete recurring-mistake tags (name, description) with a count of tagged trades |
