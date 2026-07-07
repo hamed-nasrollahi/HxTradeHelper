@@ -184,60 +184,125 @@ function groupKey(t: TradeRecord, dim: GroupDimension): { key: string; label: st
   }
 }
 
-export function computeBreakdown(trades: TradeRecord[], dim: GroupDimension): BreakdownGroup[] {
-  const groups = new Map<string, BreakdownGroup>();
+const TIME_LIKE: GroupDimension[] = ["month", "monthOfYear", "week", "hour"];
+
+/** Chronological/cyclic dims compare by key; entity-like dims compare by label. */
+function compareByDim(aKey: string, aLabel: string, bKey: string, bLabel: string, dim: GroupDimension): number {
+  if (TIME_LIKE.includes(dim)) return aKey.localeCompare(bKey);
+  if (dim === "weekday") return WEEKDAYS.indexOf(aKey) - WEEKDAYS.indexOf(bKey);
+  return aLabel.localeCompare(bLabel);
+}
+
+function newGroup(key: string, label: string, color?: string): BreakdownGroup {
+  return {
+    key,
+    label,
+    color,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0,
+    netProfit: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: null,
+    avgProfit: 0,
+    biggestWin: 0,
+    biggestLoss: 0,
+  };
+}
+
+function accumulate(g: BreakdownGroup, t: TradeRecord): void {
+  const profit = num(t.profit);
+  g.trades++;
+  g.netProfit += profit;
+  if (profit > 0) {
+    g.wins++;
+    g.grossProfit += profit;
+    g.biggestWin = Math.max(g.biggestWin, profit);
+  } else if (profit < 0) {
+    g.losses++;
+    g.grossLoss += profit;
+    g.biggestLoss = Math.min(g.biggestLoss, profit);
+  }
+}
+
+function finalize(g: BreakdownGroup): void {
+  const decided = g.wins + g.losses;
+  g.winRate = decided > 0 ? (g.wins * 100) / decided : 0;
+  g.avgProfit = g.trades > 0 ? g.netProfit / g.trades : 0;
+  g.profitFactor = g.grossLoss < 0 ? g.grossProfit / -g.grossLoss : null;
+}
+
+/**
+ * Group trades by one dimension, or by a primary dimension and then a
+ * secondary "then by" dimension (e.g. strategy, then hour of day) for a
+ * combined breakdown. The primary order matches the single-dimension case
+ * (net P/L for entity-like dims, chronological/cyclic for time-like ones);
+ * within each primary bucket, rows are ordered by the secondary dimension.
+ */
+export function computeBreakdown(trades: TradeRecord[], dim: GroupDimension, dim2?: GroupDimension): BreakdownGroup[] {
+  if (!dim2) {
+    const groups = new Map<string, BreakdownGroup>();
+    for (const t of trades) {
+      const { key, label, color } = groupKey(t, dim);
+      let g = groups.get(key);
+      if (!g) {
+        g = newGroup(key, label, color);
+        groups.set(key, g);
+      }
+      accumulate(g, t);
+    }
+    const result = Array.from(groups.values());
+    result.forEach(finalize);
+    if (TIME_LIKE.includes(dim) || dim === "weekday") {
+      result.sort((a, b) => compareByDim(a.key, a.label, b.key, b.label, dim));
+    } else {
+      result.sort((a, b) => b.netProfit - a.netProfit);
+    }
+    return result;
+  }
+
+  interface Combo {
+    primaryKey: string;
+    primaryLabel: string;
+    secondaryKey: string;
+    secondaryLabel: string;
+    group: BreakdownGroup;
+  }
+  const combos = new Map<string, Combo>();
+  const primaryNet = new Map<string, number>();
 
   for (const t of trades) {
-    const { key, label, color } = groupKey(t, dim);
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        key,
-        label,
-        color,
-        trades: 0,
-        wins: 0,
-        losses: 0,
-        winRate: 0,
-        netProfit: 0,
-        grossProfit: 0,
-        grossLoss: 0,
-        profitFactor: null,
-        avgProfit: 0,
-        biggestWin: 0,
-        biggestLoss: 0,
+    const p = groupKey(t, dim);
+    const s = groupKey(t, dim2);
+    const comboKey = `${p.key} ${s.key}`;
+    let c = combos.get(comboKey);
+    if (!c) {
+      c = {
+        primaryKey: p.key,
+        primaryLabel: p.label,
+        secondaryKey: s.key,
+        secondaryLabel: s.label,
+        group: newGroup(comboKey, `${p.label} · ${s.label}`, p.color),
       };
-      groups.set(key, g);
+      combos.set(comboKey, c);
     }
-    const profit = num(t.profit);
-    g.trades++;
-    g.netProfit += profit;
-    if (profit > 0) {
-      g.wins++;
-      g.grossProfit += profit;
-      g.biggestWin = Math.max(g.biggestWin, profit);
-    } else if (profit < 0) {
-      g.losses++;
-      g.grossLoss += profit;
-      g.biggestLoss = Math.min(g.biggestLoss, profit);
-    }
+    accumulate(c.group, t);
+    primaryNet.set(p.key, (primaryNet.get(p.key) || 0) + num(t.profit));
   }
 
-  const result = Array.from(groups.values());
-  for (const g of result) {
-    const decided = g.wins + g.losses;
-    g.winRate = decided > 0 ? (g.wins * 100) / decided : 0;
-    g.avgProfit = g.trades > 0 ? g.netProfit / g.trades : 0;
-    g.profitFactor = g.grossLoss < 0 ? g.grossProfit / -g.grossLoss : null;
-  }
+  const result = Array.from(combos.values());
+  result.forEach((c) => finalize(c.group));
 
-  // Time-like and cyclic dimensions sort by key; entity dimensions by net P/L
-  if (dim === "month" || dim === "monthOfYear" || dim === "week" || dim === "hour") {
-    result.sort((a, b) => a.key.localeCompare(b.key));
-  } else if (dim === "weekday") {
-    result.sort((a, b) => WEEKDAYS.indexOf(a.key) - WEEKDAYS.indexOf(b.key));
-  } else {
-    result.sort((a, b) => b.netProfit - a.netProfit);
-  }
-  return result;
+  const primaryIsEntity = !TIME_LIKE.includes(dim) && dim !== "weekday";
+  result.sort((a, b) => {
+    const primaryCmp = primaryIsEntity
+      ? (primaryNet.get(b.primaryKey) || 0) - (primaryNet.get(a.primaryKey) || 0)
+      : compareByDim(a.primaryKey, a.primaryLabel, b.primaryKey, b.primaryLabel, dim);
+    if (primaryCmp !== 0) return primaryCmp;
+    return compareByDim(a.secondaryKey, a.secondaryLabel, b.secondaryKey, b.secondaryLabel, dim2);
+  });
+
+  return result.map((c) => c.group);
 }
