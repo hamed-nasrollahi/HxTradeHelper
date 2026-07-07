@@ -99,6 +99,9 @@ export function buildTradeWhere(params: URLSearchParams, closedOnly: boolean): W
     clauses.push("t.type = ?");
     args.push(direction);
   }
+  if (params.get("excludeMistakes") === "1") {
+    clauses.push("t.entry_correct = 1", "t.exit_correct = 1");
+  }
   return { where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", args };
 }
 
