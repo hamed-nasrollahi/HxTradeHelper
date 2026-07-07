@@ -48,10 +48,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "expected { account, trades[] }" }, { status: 400 });
     }
 
-    // Full-history exports set skip_existing so position ids already in the
+    // Full-history exports set skip_existing so closed trades already in the
     // db are left untouched instead of being overwritten by the upsert.
-    // Exception: a trade stored as open gets updated when the payload has it
-    // closed, so positions closed while the uploader was offline still sync.
+    // Exception: a trade stored as open is always re-synced, whether it has
+    // now closed or is still open with updated SL/TP, so moving a stop loss
+    // or take profit on an open position is never silently dropped.
     const skipExisting = payload?.skip_existing === true;
     const existingOpen = new Map<number, boolean>(); // position_id -> is_open in db
     if (skipExisting) {
@@ -68,12 +69,9 @@ export async function POST(req: NextRequest) {
       const openTime = mtTime(t.open_time);
       const positionId = Number(t.position_id);
       if (!openTime || !Number.isFinite(positionId)) continue;
-      if (skipExisting && existingOpen.has(positionId)) {
-        const closesOpenTrade = existingOpen.get(positionId) === true && !t.is_open;
-        if (!closesOpenTrade) {
-          skipped++;
-          continue;
-        }
+      if (skipExisting && existingOpen.has(positionId) && existingOpen.get(positionId) === false) {
+        skipped++;
+        continue;
       }
       await query(UPSERT, [
         account,
