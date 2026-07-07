@@ -24,17 +24,20 @@ export default function BreakdownPage() {
   const { meta } = useMeta();
   const [filters, setFilters] = useState<TradeFilters>({});
   const [groupBy, setGroupBy] = useState<GroupDimension>("strategy");
+  const [excludeMistakes, setExcludeMistakes] = useState(false);
   const [groups, setGroups] = useState<BreakdownGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getJSON<{ groups: BreakdownGroup[] }>(`/api/stats/breakdown${filterQuery(filters, { groupBy })}`)
+    const extra: Record<string, string> = { groupBy };
+    if (excludeMistakes) extra.excludeMistakes = "1";
+    getJSON<{ groups: BreakdownGroup[] }>(`/api/stats/breakdown${filterQuery(filters, extra)}`)
       .then((r) => {
         setGroups(r.groups);
         setError(null);
       })
       .catch((e) => setError(e.message));
-  }, [filters, groupBy]);
+  }, [filters, groupBy, excludeMistakes]);
 
   return (
     <div>
@@ -59,6 +62,14 @@ export default function BreakdownPage() {
       </div>
 
       <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} strategies={meta.strategies} />
+      <label className="mb-3 flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
+        <input
+          type="checkbox"
+          checked={excludeMistakes}
+          onChange={(e) => setExcludeMistakes(e.target.checked)}
+        />
+        Exclude mistaken trades (entry or exit marked wrong)
+      </label>
 
       <div className="card p-4">
         <h2 className="mb-2 text-sm font-medium" style={{ color: "var(--ink-2)" }}>
