@@ -1,6 +1,6 @@
 import mysql from "mysql2/promise";
 import { DbSettings, loadSettings } from "./settings";
-import { TradeRecord } from "./types";
+import { BacktestRecord, TradeRecord } from "./types";
 
 let pool: mysql.Pool | null = null;
 let poolKey = "";
@@ -121,4 +121,30 @@ export async function fetchTrades(params: URLSearchParams, closedOnly: boolean):
     `${TRADE_SELECT} ${where} ORDER BY COALESCE(t.close_time, t.open_time), t.id`,
     args
   );
+}
+
+export async function fetchBacktests(params: URLSearchParams): Promise<BacktestRecord[]> {
+  const clauses: string[] = [];
+  const args: any[] = [];
+  const add = (sql: string, value: any) => { clauses.push(sql); args.push(value); };
+  if (params.get("from")) add("d.trade_time >= ?", `${params.get("from")} 00:00:00`);
+  if (params.get("to")) add("d.trade_time <= ?", `${params.get("to")} 23:59:59`);
+  if (params.get("symbol")) add("b.symbol = ?", params.get("symbol"));
+  if (params.get("direction")) add("d.type = ?", params.get("direction"));
+  const strategyId = params.get("strategyId");
+  if (strategyId === "none") clauses.push("b.strategy_id IS NULL");
+  else if (strategyId) add("b.strategy_id = ?", Number(strategyId));
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  return query<BacktestRecord>(`
+    SELECT d.id, b.id AS backtest_id, b.batch_id, b.account, d.trade_number, b.symbol, d.type,
+           d.result, d.duration_min, d.trade_time AS open_time,
+           d.trade_time AS close_time, 0 AS position_id, NULL AS rr,
+           0 AS entry_price, NULL AS stop_loss, NULL AS take_profit,
+           NULL AS close_price,
+           CASE d.result WHEN 'Win' THEN 1 WHEN 'Lose' THEN -1 ELSE 0 END AS profit,
+           0 AS is_open, b.strategy_id, s.name AS strategy_name,
+           s.color AS strategy_color
+    FROM backtests b JOIN backtest_data d ON d.backtest_id = b.id
+    LEFT JOIN strategies s ON s.id = b.strategy_id
+    ${where} ORDER BY d.trade_time, d.id`, args);
 }

@@ -30,8 +30,33 @@ CREATE TABLE IF NOT EXISTS trades (
     KEY idx_symbol (symbol)
 ) ENGINE = InnoDB;
 
+CREATE TABLE IF NOT EXISTS backtests (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    batch_id VARCHAR(80) NOT NULL,
+    account BIGINT NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    strategy_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backtest_batch (batch_id, account)
+) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS backtest_data (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    backtest_id BIGINT NOT NULL,
+    trade_number INT NOT NULL,
+    type VARCHAR(8) NOT NULL,
+    result VARCHAR(16) NOT NULL,
+    duration_min INT NOT NULL DEFAULT 0,
+    trade_time DATETIME NOT NULL,
+    UNIQUE KEY uq_backtest_trade (backtest_id, trade_number),
+    CONSTRAINT fk_backtest_data_backtest FOREIGN KEY (backtest_id)
+      REFERENCES backtests (id) ON DELETE CASCADE
+) ENGINE = InnoDB;
+
 -- Application user for the dashboard (matches the HX_DB_USER / HX_DB_PASSWORD
 -- defaults in dashboard/README.md). CHANGE THE PASSWORD.
 CREATE USER IF NOT EXISTS 'hx'@'localhost' IDENTIFIED BY 'change-me';
 GRANT SELECT, INSERT, UPDATE ON hx_trades.trades TO 'hx'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON hx_trades.backtests TO 'hx'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON hx_trades.backtest_data TO 'hx'@'localhost';
 FLUSH PRIVILEGES;

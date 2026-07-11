@@ -22,6 +22,45 @@ ALTER TABLE trades
 CREATE INDEX IF NOT EXISTS idx_trades_strategy ON trades (strategy_id);
 CREATE INDEX IF NOT EXISTS idx_trades_close_time ON trades (close_time);
 
+CREATE TABLE IF NOT EXISTS backtests (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    batch_id VARCHAR(80) NOT NULL,
+    account BIGINT NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    strategy_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backtest_batch (batch_id, account),
+    KEY idx_backtest_symbol (symbol),
+    CONSTRAINT fk_backtests_strategy FOREIGN KEY (strategy_id)
+      REFERENCES strategies (id) ON DELETE SET NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS backtest_data (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    backtest_id BIGINT NOT NULL,
+    trade_number INT NOT NULL,
+    type VARCHAR(8) NOT NULL,
+    result VARCHAR(16) NOT NULL,
+    duration_min INT NOT NULL DEFAULT 0,
+    trade_time DATETIME NOT NULL,
+    UNIQUE KEY uq_backtest_trade (backtest_id, trade_number),
+    KEY idx_backtest_data_time (trade_time),
+    CONSTRAINT fk_backtest_data_backtest FOREIGN KEY (backtest_id)
+      REFERENCES backtests (id) ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+-- db-init.sql may have created these tables before strategies existed.
+-- Add the dashboard relationship separately so existing compose databases
+-- receive it as well.
+CREATE INDEX IF NOT EXISTS idx_backtests_strategy ON backtests (strategy_id);
+ALTER TABLE backtests
+    ADD CONSTRAINT fk_backtests_strategy
+    FOREIGN KEY IF NOT EXISTS (strategy_id) REFERENCES strategies (id)
+    ON DELETE SET NULL;
+
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON hx_trades.backtests TO 'hx'@'localhost';
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON hx_trades.backtest_data TO 'hx'@'localhost';
+
 -- If the dashboard connects with the 'hx' application user created by
 -- dotnet/schema.sql, give it access to the new table and column. Adjust
 -- the host part ('localhost' / '%') to where the dashboard connects from.

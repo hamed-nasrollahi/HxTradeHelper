@@ -16,7 +16,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
   const alwaysOpen = pathname === "/login" || pathname === "/api/login";
-  const headless = pathname === "/api/import" || pathname === "/api/news";
+  const headless = pathname === "/api/import" || pathname === "/api/backtests/import" || pathname === "/api/news";
 
   const apiKey = loadSettings().importApiKey;
   const validKey = !!apiKey && req.headers.get("x-api-key") === apiKey;

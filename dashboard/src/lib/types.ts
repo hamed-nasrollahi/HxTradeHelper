@@ -39,6 +39,13 @@ export interface Mistake {
   trade_count: number;
 }
 
+export interface BacktestRecord extends TradeRecord {
+  backtest_id: number;
+  batch_id: string;
+  trade_number: number;
+  duration_min: number;
+}
+
 export interface TradeExtreme {
   profit: number;
   symbol: string;

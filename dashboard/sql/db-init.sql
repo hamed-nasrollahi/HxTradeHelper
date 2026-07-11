@@ -27,3 +27,28 @@ CREATE TABLE IF NOT EXISTS trades (
     KEY idx_open_time (open_time),
     KEY idx_symbol (symbol)
 ) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS backtests (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    batch_id VARCHAR(80) NOT NULL,
+    account BIGINT NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    strategy_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backtest_batch (batch_id, account),
+    KEY idx_backtest_symbol (symbol)
+) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS backtest_data (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    backtest_id BIGINT NOT NULL,
+    trade_number INT NOT NULL,
+    type VARCHAR(8) NOT NULL,
+    result VARCHAR(16) NOT NULL,
+    duration_min INT NOT NULL DEFAULT 0,
+    trade_time DATETIME NOT NULL,
+    UNIQUE KEY uq_backtest_trade (backtest_id, trade_number),
+    KEY idx_backtest_data_time (trade_time),
+    CONSTRAINT fk_backtest_data_backtest FOREIGN KEY (backtest_id)
+      REFERENCES backtests (id) ON DELETE CASCADE
+) ENGINE = InnoDB;

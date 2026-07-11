@@ -32,21 +32,22 @@ input string JournalBasePath = "TradesHistory";
 
 // Journal upload to the dashboard (MariaDB backend, see dashboard/README.md)
 input string ApiUrl = "http://127.0.0.1:3000/api/import"; // Dashboard import endpoint
-input string ApiKey = "";                                 // Import API key (X-Api-Key header)
-input bool UploadToApi = true;                            // Upload today's trades to the dashboard
+// /api/news, which itself caches/refreshes the ForexFactory feed hourly)
+input string NewsFeedUrl = "http://127.0.0.1:3000/api/news"; // Dashboard news endpoint
 
+input string ApiKey = "";                                 // Import API key (X-Api-Key header)
+
+input bool UploadToApi = true;                            // Upload today's trades to the dashboard
 
 input bool showCandleTime = true;
 input bool showSessions = false;
 input bool showSlipage = true;
 
 // News calendar (fetched through HxTradeUploader.dll from the dashboard's
-// /api/news, which itself caches/refreshes the ForexFactory feed hourly)
 input bool ShowNews = false;              // Fetch calendar (orange + red events)
 input string NewsCurrencies = "USD";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
 input int NewsWindowMinutes = 2;          // Show countdown when the next event is within this window
 input int NewsDurationMinutes = 15;       // How long an event counts as "in progress" after release
-input string NewsFeedUrl = "http://127.0.0.1:3000/api/news"; // Dashboard news endpoint
 
 input bool SummerTime = false;
 
@@ -122,7 +123,7 @@ input double tradeRisk   = 1.0;              // Risk per trade (R)
 DialogHx  AppWindow;
 CButton  btnTabTrade, btnTabTest, btnTabJournal;
 CButton  btnJournal, btnJournalAll, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
-btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnEnbl, btnReCalc, btnReset;
+btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnExpApi, btnEnbl, btnReCalc, btnReset;
 CLabel   lblRepo;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
@@ -255,6 +256,7 @@ void PopulateTabs()
   CreateButton(btnReset, "btnReset", "Rst",10,160,53,180);
   CreateButton(btnReCalc, "btnReCalc", "CLC",57,160,100,180);
   CreateButton(btnExp, "btnExp", "Export",10,190,100,210);
+  CreateButton(btnExpApi, "btnExpApi", "Export API",10,220,100,240);
 
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,100,70);
@@ -316,6 +318,7 @@ void ApplyTabVisibility()
    ShowButton(btnReset, test);
    ShowButton(btnReCalc, test);
    ShowButton(btnExp, test);
+   ShowButton(btnExpApi, test);
 
    // Journal tab
    ShowButton(btnJournal, journal);
@@ -922,6 +925,10 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             Alert("Export Complete: " + IntegerToString(n) + " trade(s) to MQL5\\Files\\" + fileName);
          }
       }
+      else if(sparam == "btnExpApi")
+      {
+         ExportBacktestToApi();
+      }
       else if(sparam == "btnReset")
       {
          ObjectsDeleteAll(0, "WB_", 0, OBJ_FIBO);
@@ -1470,6 +1477,83 @@ void ExportTodaysTrades()
 
    Alert(StringFormat("Journal Export: exported %d trade(s) to MQL5\\Files\\%s - %d screenshot(s) captured.%s",
          total, csvFile, shots, uploadNote));
+}
+
+//+------------------------------------------------------------------+
+//| Upload the current Test-tab fibos without writing CSV/JSON files |
+//+------------------------------------------------------------------+
+void ExportBacktestToApi()
+{
+   string tradeNames[];
+   int total = ObjectsTotal(0, 0, OBJ_FIBO);
+   for(int i = 0; i < total; i++)
+   {
+      string name = ObjectName(0, i, 0, OBJ_FIBO);
+      string pfx = StringSubstr(name, 0, 3);
+      if(pfx == "WB_" || pfx == "WS_" || pfx == "LB_" || pfx == "LS_")
+      {
+         int sz = ArraySize(tradeNames);
+         ArrayResize(tradeNames, sz + 1);
+         tradeNames[sz] = name;
+      }
+   }
+
+   int n = ArraySize(tradeNames);
+   if(n == 0)
+   {
+      Alert("Backtest API export: no test trades found.");
+      return;
+   }
+   for(int a = 0; a < n - 1; a++)
+      for(int b = a + 1; b < n; b++)
+         if(StringSubstr(tradeNames[a], 3) > StringSubstr(tradeNames[b], 3))
+         {
+            string tmp = tradeNames[a];
+            tradeNames[a] = tradeNames[b];
+            tradeNames[b] = tmp;
+         }
+
+   string accountId = StringFormat("%I64d", AccountInfoInteger(ACCOUNT_LOGIN));
+   string batchId = accountId + "-"
+                  + TimeToString(TimeCurrent(), TIME_DATE | TIME_MINUTES | TIME_SECONDS);
+   StringReplace(batchId, ".", "");
+   StringReplace(batchId, ":", "");
+   StringReplace(batchId, " ", "-");
+   string json = "{\"batch_id\":\"" + batchId + "\",\"account\":"
+               + accountId
+               + ",\"symbol\":\"" + Symbol() + "\",\"trades\":[";
+   for(int i = 0; i < n; i++)
+   {
+      string pfx = StringSubstr(tradeNames[i], 0, 3);
+      string dt = StringSubstr(tradeNames[i], 3);
+      string type = (pfx == "WB_" || pfx == "LB_") ? "Buy" : "Sell";
+      string result = (pfx == "WB_" || pfx == "WS_") ? "Win" : "Lose";
+      datetime t1 = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 0);
+      datetime t2 = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 1);
+      int duration = (int)(MathAbs((double)(t2 - t1)) / 60);
+      if(i > 0) json += ",";
+      json += "{\"trade_number\":" + IntegerToString(i + 1)
+           + ",\"trade_time\":\"" + dt + "\",\"type\":\"" + type
+           + "\",\"result\":\"" + result + "\",\"duration_min\":"
+           + IntegerToString(duration) + "}";
+   }
+   json += "]}";
+
+   string url = ApiUrl;
+   int marker = StringFind(url, "/api/import");
+   if(marker >= 0)
+      url = StringSubstr(url, 0, marker) + "/api/backtests/import";
+   else
+      url += "/api/backtests/import";
+
+   int status = UploadJson(url, ApiKey, json, 10000);
+   string response;
+   StringInit(response, 2048);
+   GetLastResponse(response, 2048);
+   if(status >= 200 && status < 300)
+      Alert("Backtest API export complete: " + IntegerToString(n) + " trade(s).");
+   else
+      Alert("Backtest API export failed (HTTP " + IntegerToString(status) + "): " + response);
 }
 
 //+------------------------------------------------------------------+

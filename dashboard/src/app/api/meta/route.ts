@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const symbols = await query<{ symbol: string }>(
-      "SELECT DISTINCT symbol FROM trades ORDER BY symbol"
+      "SELECT symbol FROM (SELECT DISTINCT symbol FROM trades UNION SELECT DISTINCT symbol FROM backtests) x ORDER BY symbol"
     );
     let strategies: any[] = [];
     try {
