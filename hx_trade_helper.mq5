@@ -260,7 +260,7 @@ void PopulateTabs()
 
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,100,70);
-  CreateButton(btnJournalAll, "btnJournalAll", "Export All",10,80,100,110);
+  CreateButton(btnJournalAll, "btnJournalAll", "Export to API",10,80,100,110);
   CreateButton(btnCLR, "btnCLR", "CLR",10,120,100,140);
 
   // Footer credit, always visible regardless of the active tab. Full URL
