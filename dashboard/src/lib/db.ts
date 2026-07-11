@@ -1,6 +1,6 @@
 import mysql from "mysql2/promise";
 import { DbSettings, loadSettings } from "./settings";
-import { BacktestRecord, TradeRecord } from "./types";
+import { BacktestBatch, BacktestRecord, TradeRecord } from "./types";
 
 let pool: mysql.Pool | null = null;
 let poolKey = "";
@@ -127,6 +127,7 @@ export async function fetchBacktests(params: URLSearchParams): Promise<BacktestR
   const clauses: string[] = [];
   const args: any[] = [];
   const add = (sql: string, value: any) => { clauses.push(sql); args.push(value); };
+  if (params.get("backtestId")) add("b.id = ?", Number(params.get("backtestId")));
   if (params.get("from")) add("d.trade_time >= ?", `${params.get("from")} 00:00:00`);
   if (params.get("to")) add("d.trade_time <= ?", `${params.get("to")} 23:59:59`);
   if (params.get("symbol")) add("b.symbol = ?", params.get("symbol"));
@@ -147,4 +148,17 @@ export async function fetchBacktests(params: URLSearchParams): Promise<BacktestR
     FROM backtests b JOIN backtest_data d ON d.backtest_id = b.id
     LEFT JOIN strategies s ON s.id = b.strategy_id
     ${where} ORDER BY d.trade_time, d.id`, args);
+}
+
+export async function fetchBacktestBatches(): Promise<BacktestBatch[]> {
+  return query<BacktestBatch>(`
+    SELECT b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
+           b.created_at, s.name AS strategy_name, s.color AS strategy_color,
+           COUNT(d.id) AS trade_count
+    FROM backtests b
+    LEFT JOIN strategies s ON s.id = b.strategy_id
+    LEFT JOIN backtest_data d ON d.backtest_id = b.id
+    GROUP BY b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
+             b.created_at, s.name, s.color
+    ORDER BY b.created_at DESC, b.id DESC`);
 }

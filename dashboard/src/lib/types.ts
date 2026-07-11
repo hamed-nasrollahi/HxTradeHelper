@@ -46,6 +46,18 @@ export interface BacktestRecord extends TradeRecord {
   duration_min: number;
 }
 
+export interface BacktestBatch {
+  id: number;
+  batch_id: string;
+  account: number;
+  symbol: string;
+  strategy_id: number | null;
+  strategy_name: string | null;
+  strategy_color: string | null;
+  created_at: string;
+  trade_count: number;
+}
+
 export interface TradeExtreme {
   profit: number;
   symbol: string;
