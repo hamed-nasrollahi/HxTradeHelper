@@ -82,6 +82,11 @@ export function buildTradeWhere(params: URLSearchParams, closedOnly: boolean): W
     clauses.push("COALESCE(t.close_time, t.open_time) <= ?");
     args.push(`${to} 23:59:59`);
   }
+  const account = params.get("account");
+  if (account) {
+    clauses.push("t.account = ?");
+    args.push(Number(account));
+  }
   const symbol = params.get("symbol");
   if (symbol) {
     clauses.push("t.symbol = ?");

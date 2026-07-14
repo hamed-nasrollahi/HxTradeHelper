@@ -6,10 +6,11 @@ interface Props {
   filters: TradeFilters;
   onChange: (f: TradeFilters) => void;
   symbols: string[];
+  accounts: number[];
   strategies: { id: number; name: string }[];
 }
 
-export default function Filters({ filters, onChange, symbols, strategies }: Props) {
+export default function Filters({ filters, onChange, symbols, accounts, strategies }: Props) {
   const set = (patch: Partial<TradeFilters>) => onChange({ ...filters, ...patch });
 
   return (
@@ -31,6 +32,21 @@ export default function Filters({ filters, onChange, symbols, strategies }: Prop
           value={filters.to || ""}
           onChange={(e) => set({ to: e.target.value || undefined })}
         />
+      </label>
+      <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--ink-2)" }}>
+        Account
+        <select
+          className="input"
+          value={filters.account || ""}
+          onChange={(e) => set({ account: e.target.value || undefined })}
+        >
+          <option value="">All accounts</option>
+          {accounts.map((a) => (
+            <option key={a} value={String(a)}>
+              {a}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--ink-2)" }}>
         Symbol

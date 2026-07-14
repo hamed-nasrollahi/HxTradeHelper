@@ -127,6 +127,7 @@ export type GroupDimension =
 export interface TradeFilters {
   from?: string;
   to?: string;
+  account?: string; // number, as string
   symbol?: string;
   strategyId?: string; // number, or "none" for unassigned
   direction?: string; // Buy / Sell
