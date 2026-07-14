@@ -82,7 +82,7 @@ export default function BreakdownPage() {
         </select>
       </label>
 
-      <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} strategies={meta.strategies} />
+      <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} accounts={meta.accounts} strategies={meta.strategies} />
       <label className="mb-3 flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
         <input
           type="checkbox"

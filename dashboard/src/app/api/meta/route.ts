@@ -8,6 +8,9 @@ export async function GET() {
     const symbols = await query<{ symbol: string }>(
       "SELECT symbol FROM (SELECT DISTINCT symbol FROM trades UNION SELECT DISTINCT symbol FROM backtests) x ORDER BY symbol"
     );
+    const accounts = await query<{ account: number }>(
+      "SELECT DISTINCT account FROM trades ORDER BY account"
+    );
     let strategies: any[] = [];
     try {
       strategies = await query("SELECT id, name, color FROM strategies ORDER BY name");
@@ -22,6 +25,7 @@ export async function GET() {
     }
     return NextResponse.json({
       symbols: symbols.map((r) => r.symbol),
+      accounts: accounts.map((r) => r.account),
       strategies,
       mistakes,
     });
