@@ -46,7 +46,7 @@ export default function OverviewPage() {
     <div>
       <h1 className="mb-4 text-xl font-semibold">Overview</h1>
       {error ? <ErrorBanner message={error} /> : null}
-      <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} strategies={meta.strategies} />
+      <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} accounts={meta.accounts} strategies={meta.strategies} />
 
       {s ? (
         <>
