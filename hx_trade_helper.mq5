@@ -526,7 +526,7 @@ void UpdateNewsLabel()
                           newsEvents[nextIdx].currency, newsEvents[nextIdx].title);
       clr = newsEvents[nextIdx].isRed ? clrRed : clrOrange;
    }
-   CreateIndicator(340, 90, name, clr);
+   CreateIndicator(500, 10, name, clr);
    SetIndicatorText(name, text, clr);
 }
 
