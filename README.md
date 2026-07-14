@@ -29,6 +29,14 @@ they stand out as navigation rather than tools.
 
 ![Journal tab export controls](assets/screenshots/journal-tab.svg)
 
+### Dashboard
+
+![Dashboard overview: KPI tiles, equity curve and monthly P/L](assets/screenshots/overview.png)
+
+![Dashboard breakdown: net P/L by strategy with a grouped stats table](assets/screenshots/breakdown.png)
+
+![Dashboard trades list with strategy tagging and mistake review](assets/screenshots/trades.png)
+
 ## Features
 
 ### Trade tab
