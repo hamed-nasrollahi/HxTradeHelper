@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/backtests", label: "Backtests" },
   { href: "/strategies", label: "Strategies" },
   { href: "/mistakes", label: "Mistakes" },
+  { href: "/accounts", label: "Accounts" },
   { href: "/settings", label: "Settings" },
 ];
 
