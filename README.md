@@ -181,6 +181,8 @@ Experts log).
 | `NewsCurrencies` | *(empty)* | CSV currency filter for events; empty = the chart symbol's base and profit currencies |
 | `NewsWindowMinutes` | 2 | Countdown appears when the next event is within this window |
 | `NewsDurationMinutes` | 15 | How long an event stays "LIVE" after its release time |
+| `NewsAlertMinutes` | 15 | `Alert()` heads-up this many minutes before a major (High impact) event |
+| `NewsCloseMinutes` | 11 | `Alert()` reminder to close open trades this many minutes before a major event (only fires while a position is open) |
 | `NewsFeedUrl` | `https://trade.hamex.ee/api/news` | Dashboard news endpoint (`?currencies=` is appended automatically) |
 | `Level1/2/3` | 1.25 / 2.50 / 5.00 | Round-number grid steps (price units) |
 | `ATR_Period` | 14 | Daily ATR period for the bands |
