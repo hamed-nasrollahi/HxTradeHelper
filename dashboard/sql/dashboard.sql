@@ -117,3 +117,14 @@ CREATE INDEX IF NOT EXISTS idx_trades_mistake ON trades (mistake_id);
 
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON hx_trades.mistakes TO 'hx'@'localhost';
 -- FLUSH PRIVILEGES;
+
+-- Per-account visibility: accounts are discovered live from trades.account,
+-- this table just remembers which ones are hidden from the dropdowns.
+-- Missing row = visible (default), so nothing needs backfilling.
+CREATE TABLE IF NOT EXISTS account_visibility (
+    account BIGINT     NOT NULL PRIMARY KEY,
+    visible TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE = InnoDB;
+
+-- GRANT SELECT, INSERT, UPDATE ON hx_trades.account_visibility TO 'hx'@'localhost';
+-- FLUSH PRIVILEGES;

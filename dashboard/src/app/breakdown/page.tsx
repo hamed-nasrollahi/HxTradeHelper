@@ -23,15 +23,32 @@ const DIMENSIONS: { value: GroupDimension; label: string }[] = [
 export default function BreakdownPage() {
   const { meta } = useMeta();
   const [filters, setFilters] = useState<TradeFilters>({});
-  const [groupBy, setGroupBy] = useState<GroupDimension>("strategy");
-  const [groupBy2, setGroupBy2] = useState<GroupDimension | "">("");
+  const [groupBys, setGroupBys] = useState<GroupDimension[]>(["strategy"]);
   const [excludeMistakes, setExcludeMistakes] = useState(false);
   const [groups, setGroups] = useState<BreakdownGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const toggleDim = (d: GroupDimension) => {
+    setGroupBys((prev) => {
+      if (prev.includes(d)) {
+        return prev.length > 1 ? prev.filter((x) => x !== d) : prev;
+      }
+      return [...prev, d];
+    });
+  };
+
+  const moveDim = (index: number, dir: -1 | 1) => {
+    setGroupBys((prev) => {
+      const next = [...prev];
+      const j = index + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[index], next[j]] = [next[j], next[index]];
+      return next;
+    });
+  };
+
   useEffect(() => {
-    const extra: Record<string, string> = { groupBy };
-    if (groupBy2) extra.groupBy2 = groupBy2;
+    const extra: Record<string, string> = { groupBy: groupBys.join(",") };
     if (excludeMistakes) extra.excludeMistakes = "1";
     getJSON<{ groups: BreakdownGroup[] }>(`/api/stats/breakdown${filterQuery(filters, extra)}`)
       .then((r) => {
@@ -39,7 +56,7 @@ export default function BreakdownPage() {
         setError(null);
       })
       .catch((e) => setError(e.message));
-  }, [filters, groupBy, groupBy2, excludeMistakes]);
+  }, [filters, groupBys, excludeMistakes]);
 
   return (
     <div>
@@ -47,40 +64,54 @@ export default function BreakdownPage() {
       {error ? <ErrorBanner message={error} /> : null}
 
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        {DIMENSIONS.map((d) => (
-          <button
-            key={d.value}
-            className="rounded-md px-3 py-1.5 text-sm"
-            style={{
-              background: groupBy === d.value ? "var(--s1)" : "var(--surface-1)",
-              color: groupBy === d.value ? "#fff" : "var(--ink-2)",
-              border: "1px solid var(--border)",
-            }}
-            onClick={() => {
-              setGroupBy(d.value);
-              if (d.value === groupBy2) setGroupBy2("");
-            }}
-          >
-            {d.label}
-          </button>
-        ))}
+        {DIMENSIONS.map((d) => {
+          const idx = groupBys.indexOf(d.value);
+          const active = idx !== -1;
+          return (
+            <button
+              key={d.value}
+              className="rounded-md px-3 py-1.5 text-sm"
+              style={{
+                background: active ? "var(--s1)" : "var(--surface-1)",
+                color: active ? "#fff" : "var(--ink-2)",
+                border: "1px solid var(--border)",
+              }}
+              onClick={() => toggleDim(d.value)}
+            >
+              {active ? `${idx + 1}. ` : ""}
+              {d.label}
+            </button>
+          );
+        })}
       </div>
 
-      <label className="mb-2 flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
-        Then by
-        <select
-          className="input"
-          value={groupBy2}
-          onChange={(e) => setGroupBy2(e.target.value as GroupDimension | "")}
-        >
-          <option value="">None</option>
-          {DIMENSIONS.filter((d) => d.value !== groupBy).map((d) => (
-            <option key={d.value} value={d.value}>
-              {d.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs" style={{ color: "var(--ink-2)" }}>
+        Grouped by:
+        {groupBys.map((d, i) => (
+          <span
+            key={d}
+            className="flex items-center gap-1 rounded-md px-2 py-1"
+            style={{ border: "1px solid var(--border)" }}
+          >
+            {DIMENSIONS.find((x) => x.value === d)?.label}
+            {i > 0 ? (
+              <button aria-label="move earlier" onClick={() => moveDim(i, -1)}>
+                ↑
+              </button>
+            ) : null}
+            {i < groupBys.length - 1 ? (
+              <button aria-label="move later" onClick={() => moveDim(i, 1)}>
+                ↓
+              </button>
+            ) : null}
+            {groupBys.length > 1 ? (
+              <button aria-label="remove" onClick={() => toggleDim(d)}>
+                ×
+              </button>
+            ) : null}
+          </span>
+        ))}
+      </div>
 
       <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} accounts={meta.accounts} strategies={meta.strategies} />
       <label className="mb-3 flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
@@ -94,8 +125,8 @@ export default function BreakdownPage() {
 
       <div className="card p-4">
         <h2 className="mb-2 text-sm font-medium" style={{ color: "var(--ink-2)" }}>
-          Net P/L by {DIMENSIONS.find((d) => d.value === groupBy)?.label.toLowerCase()}
-          {groupBy2 ? `, then ${DIMENSIONS.find((d) => d.value === groupBy2)?.label.toLowerCase()}` : ""}
+          Net P/L by{" "}
+          {groupBys.map((d) => DIMENSIONS.find((x) => x.value === d)?.label.toLowerCase()).join(", then ")}
         </h2>
         <PnlBarChart groups={groups} />
       </div>

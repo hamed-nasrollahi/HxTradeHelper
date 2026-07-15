@@ -235,73 +235,51 @@ function finalize(g: BreakdownGroup): void {
 }
 
 /**
- * Group trades by one dimension, or by a primary dimension and then a
- * secondary "then by" dimension (e.g. strategy, then hour of day) for a
- * combined breakdown. The primary order matches the single-dimension case
- * (net P/L for entity-like dims, chronological/cyclic for time-like ones);
- * within each primary bucket, rows are ordered by the secondary dimension.
+ * Group trades by an ordered list of dimensions (e.g. [strategy, hour] =
+ * "strategy, then hour of day"). The first (primary) dimension is ordered
+ * by net P/L for entity-like dims or chronologically/cyclically for
+ * time-like ones; every dimension after that breaks ties the same way the
+ * old single "then by" column did (chronological/cyclic for time-like
+ * dims, alphabetical by label otherwise).
  */
-export function computeBreakdown(trades: TradeRecord[], dim: GroupDimension, dim2?: GroupDimension): BreakdownGroup[] {
-  if (!dim2) {
-    const groups = new Map<string, BreakdownGroup>();
-    for (const t of trades) {
-      const { key, label, color } = groupKey(t, dim);
-      let g = groups.get(key);
-      if (!g) {
-        g = newGroup(key, label, color);
-        groups.set(key, g);
-      }
-      accumulate(g, t);
-    }
-    const result = Array.from(groups.values());
-    result.forEach(finalize);
-    if (TIME_LIKE.includes(dim) || dim === "weekday") {
-      result.sort((a, b) => compareByDim(a.key, a.label, b.key, b.label, dim));
-    } else {
-      result.sort((a, b) => b.netProfit - a.netProfit);
-    }
-    return result;
-  }
-
+export function computeBreakdown(trades: TradeRecord[], dims: GroupDimension[]): BreakdownGroup[] {
   interface Combo {
-    primaryKey: string;
-    primaryLabel: string;
-    secondaryKey: string;
-    secondaryLabel: string;
+    keys: string[];
+    labels: string[];
     group: BreakdownGroup;
   }
   const combos = new Map<string, Combo>();
   const primaryNet = new Map<string, number>();
 
   for (const t of trades) {
-    const p = groupKey(t, dim);
-    const s = groupKey(t, dim2);
-    const comboKey = `${p.key} ${s.key}`;
+    const parts = dims.map((d) => groupKey(t, d));
+    const comboKey = parts.map((p) => p.key).join(" ");
     let c = combos.get(comboKey);
     if (!c) {
       c = {
-        primaryKey: p.key,
-        primaryLabel: p.label,
-        secondaryKey: s.key,
-        secondaryLabel: s.label,
-        group: newGroup(comboKey, `${p.label} · ${s.label}`, p.color),
+        keys: parts.map((p) => p.key),
+        labels: parts.map((p) => p.label),
+        group: newGroup(comboKey, parts.map((p) => p.label).join(" · "), parts[0].color),
       };
       combos.set(comboKey, c);
     }
     accumulate(c.group, t);
-    primaryNet.set(p.key, (primaryNet.get(p.key) || 0) + num(t.profit));
+    primaryNet.set(parts[0].key, (primaryNet.get(parts[0].key) || 0) + num(t.profit));
   }
 
   const result = Array.from(combos.values());
   result.forEach((c) => finalize(c.group));
 
+  const dim = dims[0];
   const primaryIsEntity = !TIME_LIKE.includes(dim) && dim !== "weekday";
   result.sort((a, b) => {
-    const primaryCmp = primaryIsEntity
-      ? (primaryNet.get(b.primaryKey) || 0) - (primaryNet.get(a.primaryKey) || 0)
-      : compareByDim(a.primaryKey, a.primaryLabel, b.primaryKey, b.primaryLabel, dim);
-    if (primaryCmp !== 0) return primaryCmp;
-    return compareByDim(a.secondaryKey, a.secondaryLabel, b.secondaryKey, b.secondaryLabel, dim2);
+    let cmp = primaryIsEntity
+      ? (primaryNet.get(b.keys[0]) || 0) - (primaryNet.get(a.keys[0]) || 0)
+      : compareByDim(a.keys[0], a.labels[0], b.keys[0], b.labels[0], dim);
+    for (let i = 1; cmp === 0 && i < dims.length; i++) {
+      cmp = compareByDim(a.keys[i], a.labels[i], b.keys[i], b.labels[i], dims[i]);
+    }
+    return cmp;
   });
 
   return result.map((c) => c.group);

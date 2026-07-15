@@ -48,6 +48,8 @@ input bool ShowNews = false;              // Fetch calendar (orange + red events
 input string NewsCurrencies = "USD";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
 input int NewsWindowMinutes = 2;          // Show countdown when the next event is within this window
 input int NewsDurationMinutes = 15;       // How long an event counts as "in progress" after release
+input int NewsAlertMinutes = 15;          // Alert this many minutes before a major (High impact) event
+input int NewsCloseMinutes = 11;          // "Close trades" alert this many minutes before a major event
 
 input bool SummerTime = false;
 
@@ -153,6 +155,12 @@ struct NewsEvent
 };
 NewsEvent newsEvents[];
 datetime lastNewsFetch = 0;
+
+// Event times we've already fired the heads-up / close-trades alert for,
+// kept separate from newsEvents[] so an hourly recalendar refetch (which
+// rebuilds newsEvents[] from scratch) can't cause a duplicate Alert()
+datetime alertedNewsTimes[];
+datetime closeAlertedNewsTimes[];
 
 //+------------------------------------------------------------------+
 //| Journal trade record built from the account trade history        |
@@ -388,7 +396,81 @@ void UpdateNews()
 {
    if(TimeGMT() - lastNewsFetch >= 3600)
       FetchNewsEvents();
+   CheckNewsAlerts();
    UpdateNewsLabel();
+}
+
+//+------------------------------------------------------------------+
+//| True if t is already present in a datetime array                 |
+//+------------------------------------------------------------------+
+bool TimeInArray(const datetime &arr[], const datetime t)
+{
+   for(int i = 0; i < ArraySize(arr); i++)
+      if(arr[i] == t)
+         return true;
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Drop entries whose event has already passed - keeps the alerted  |
+//| trackers from growing forever                                    |
+//+------------------------------------------------------------------+
+void PruneAlerted(datetime &arr[], const datetime now)
+{
+   datetime kept[];
+   for(int i = 0; i < ArraySize(arr); i++)
+   {
+      if(arr[i] >= now - 3600)
+      {
+         int k = ArraySize(kept);
+         ArrayResize(kept, k + 1);
+         kept[k] = arr[i];
+      }
+   }
+   ArrayCopy(arr, kept);
+}
+
+//+------------------------------------------------------------------+
+//| Alert once, NewsAlertMinutes before a major (High impact) event, |
+//| and again, NewsCloseMinutes before it, as a reminder to close    |
+//| open trades. Each event fires each alert at most once.           |
+//+------------------------------------------------------------------+
+void CheckNewsAlerts()
+{
+   datetime now = TimeGMT();
+   PruneAlerted(alertedNewsTimes, now);
+   PruneAlerted(closeAlertedNewsTimes, now);
+
+   for(int i = 0; i < ArraySize(newsEvents); i++)
+   {
+      if(!newsEvents[i].isRed)
+         continue; // major = High impact only
+
+      datetime t = newsEvents[i].time;
+      if(t <= now)
+         continue;
+
+      int secondsToGo = (int)(t - now);
+
+      if(secondsToGo <= NewsAlertMinutes * 60 && !TimeInArray(alertedNewsTimes, t))
+      {
+         int sz = ArraySize(alertedNewsTimes);
+         ArrayResize(alertedNewsTimes, sz + 1);
+         alertedNewsTimes[sz] = t;
+         Alert(StringFormat("Major news in %d min: %s %s", NewsAlertMinutes,
+                             newsEvents[i].currency, newsEvents[i].title));
+      }
+
+      if(secondsToGo <= NewsCloseMinutes * 60 && !TimeInArray(closeAlertedNewsTimes, t)
+         && PositionsTotal() > 0)
+      {
+         int sz = ArraySize(closeAlertedNewsTimes);
+         ArrayResize(closeAlertedNewsTimes, sz + 1);
+         closeAlertedNewsTimes[sz] = t;
+         Alert(StringFormat("Close trades: major news in %d min: %s %s", NewsCloseMinutes,
+                             newsEvents[i].currency, newsEvents[i].title));
+      }
+   }
 }
 
 //+------------------------------------------------------------------+

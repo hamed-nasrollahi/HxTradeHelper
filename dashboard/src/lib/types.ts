@@ -39,6 +39,11 @@ export interface Mistake {
   trade_count: number;
 }
 
+export interface AccountVisibility {
+  account: number;
+  visible: number; // 1 = shown in dropdowns/filters, 0 = hidden
+}
+
 export interface BacktestRecord extends TradeRecord {
   backtest_id: number;
   batch_id: string;

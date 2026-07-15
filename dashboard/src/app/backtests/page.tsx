@@ -22,8 +22,27 @@ export default function BacktestsPage() {
   const [rows, setRows] = useState<BacktestRecord[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [groups, setGroups] = useState<BreakdownGroup[]>([]);
-  const [groupBy, setGroupBy] = useState<GroupDimension>("strategy");
+  const [groupBys, setGroupBys] = useState<GroupDimension[]>(["strategy"]);
   const [error, setError] = useState<string | null>(null);
+
+  const toggleDim = (d: GroupDimension) => {
+    setGroupBys((prev) => {
+      if (prev.includes(d)) {
+        return prev.length > 1 ? prev.filter((x) => x !== d) : prev;
+      }
+      return [...prev, d];
+    });
+  };
+
+  const moveDim = (index: number, dir: -1 | 1) => {
+    setGroupBys((prev) => {
+      const next = [...prev];
+      const j = index + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[index], next[j]] = [next[j], next[index]];
+      return next;
+    });
+  };
 
   const loadBatches = () => getJSON<{ batches: BacktestBatch[] }>("/api/backtests?listOnly=1")
     .then((r) => {
@@ -37,7 +56,7 @@ export default function BacktestsPage() {
     const extra = { backtestId: String(selectedId) };
     return Promise.all([
     getJSON<{ backtests: BacktestRecord[] }>(`/api/backtests${filterQuery({}, extra)}`),
-    getJSON<{ summary: Summary; groups: BreakdownGroup[] }>(`/api/backtests/stats${filterQuery({}, { ...extra, groupBy })}`),
+    getJSON<{ summary: Summary; groups: BreakdownGroup[] }>(`/api/backtests/stats${filterQuery({}, { ...extra, groupBy: groupBys.join(",") })}`),
   ]).then(([r, s]) => { setRows(r.backtests); setSummary(s.summary); setGroups(s.groups); setError(null); })
     .catch((e) => setError(e.message));
   };
@@ -45,7 +64,7 @@ export default function BacktestsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadBatches(); }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadAnalysis(); }, [selectedId, groupBy]);
+  useEffect(() => { loadAnalysis(); }, [selectedId, groupBys]);
 
   const assign = async (strategyId: string) => {
     if (!selectedId) return;
@@ -80,8 +99,23 @@ export default function BacktestsPage() {
       <KpiCard label="Normalized result" value={`${summary.netProfit > 0 ? "+" : ""}${summary.netProfit}R`} sub="wins minus losses" />
       <KpiCard label="Longest streaks" value={`${summary.longestWinStreak}W / ${summary.longestLossStreak}L`} />
     </div> : null}
-    <div className="mt-6 flex flex-wrap gap-2">{DIMENSIONS.map(d => <button key={d.value} className="rounded-md px-3 py-1.5 text-sm" style={{background:groupBy === d.value ? "var(--s1)" : "var(--surface-1)", color:groupBy === d.value ? "#fff" : "var(--ink-2)", border:"1px solid var(--border)"}} onClick={() => setGroupBy(d.value)}>{d.label}</button>)}</div>
-    <div className="card mt-2 p-4"><h2 className="mb-2 text-sm font-medium">Normalized result by {DIMENSIONS.find(d => d.value === groupBy)?.label.toLowerCase()}</h2><PnlBarChart groups={groups} /></div>
+    <div className="mt-6 flex flex-wrap gap-2">{DIMENSIONS.map(d => {
+      const idx = groupBys.indexOf(d.value);
+      const active = idx !== -1;
+      return <button key={d.value} className="rounded-md px-3 py-1.5 text-sm" style={{background:active ? "var(--s1)" : "var(--surface-1)", color:active ? "#fff" : "var(--ink-2)", border:"1px solid var(--border)"}} onClick={() => toggleDim(d.value)}>{active ? `${idx + 1}. ` : ""}{d.label}</button>;
+    })}</div>
+    <div className="mb-2 mt-2 flex flex-wrap items-center gap-2 text-xs" style={{color:"var(--ink-2)"}}>
+      Grouped by:
+      {groupBys.map((d, i) => (
+        <span key={d} className="flex items-center gap-1 rounded-md px-2 py-1" style={{border:"1px solid var(--border)"}}>
+          {DIMENSIONS.find((x) => x.value === d)?.label}
+          {i > 0 ? <button aria-label="move earlier" onClick={() => moveDim(i, -1)}>↑</button> : null}
+          {i < groupBys.length - 1 ? <button aria-label="move later" onClick={() => moveDim(i, 1)}>↓</button> : null}
+          {groupBys.length > 1 ? <button aria-label="remove" onClick={() => toggleDim(d)}>×</button> : null}
+        </span>
+      ))}
+    </div>
+    <div className="card mt-2 p-4"><h2 className="mb-2 text-sm font-medium">Normalized result by {groupBys.map(d => DIMENSIONS.find(x => x.value === d)?.label.toLowerCase()).join(", then ")}</h2><PnlBarChart groups={groups} /></div>
     <div className="card mt-6 overflow-x-auto"><table className="w-full text-sm">
       <thead><tr className="text-left text-xs" style={{color:"var(--ink-muted)"}}>
         <th className="px-3 py-2">Time</th><th>Trade #</th><th>Type</th><th>Result</th><th>Duration</th>
