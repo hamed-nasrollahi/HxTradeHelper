@@ -67,7 +67,7 @@ interface WhereClause {
 }
 
 export function buildTradeWhere(params: URLSearchParams, closedOnly: boolean): WhereClause {
-  const clauses: string[] = [];
+  const clauses: string[] = ["t.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0)"];
   const args: any[] = [];
   if (closedOnly) {
     clauses.push("t.is_open = 0", "t.close_time IS NOT NULL");
@@ -129,7 +129,7 @@ export async function fetchTrades(params: URLSearchParams, closedOnly: boolean):
 }
 
 export async function fetchBacktests(params: URLSearchParams): Promise<BacktestRecord[]> {
-  const clauses: string[] = [];
+  const clauses: string[] = ["b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0)"];
   const args: any[] = [];
   const add = (sql: string, value: any) => { clauses.push(sql); args.push(value); };
   if (params.get("backtestId")) add("b.id = ?", Number(params.get("backtestId")));
@@ -163,6 +163,7 @@ export async function fetchBacktestBatches(): Promise<BacktestBatch[]> {
     FROM backtests b
     LEFT JOIN strategies s ON s.id = b.strategy_id
     LEFT JOIN backtest_data d ON d.backtest_id = b.id
+    WHERE b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0)
     GROUP BY b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
              b.created_at, s.name, s.color
     ORDER BY b.created_at DESC, b.id DESC`);
