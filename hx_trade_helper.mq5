@@ -46,7 +46,7 @@ input bool showSlipage = true;
 // News calendar (fetched through HxTradeUploader.dll from the dashboard's
 input bool ShowNews = false;              // Fetch calendar (orange + red events)
 input string NewsCurrencies = "USD";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
-input int NewsWindowMinutes = 2;          // Show countdown when the next event is within this window
+input int NewsWindowMinutes = 2;          // Turn an event red/orange (from gray) this many minutes before it fires
 input int NewsDurationMinutes = 15;       // How long an event counts as "in progress" after release
 input int NewsAlertMinutes = 15;          // Alert this many minutes before a major (High impact) event
 input int NewsCloseMinutes = 11;          // "Close trades" alert this many minutes before a major event
@@ -155,6 +155,7 @@ struct NewsEvent
 };
 NewsEvent newsEvents[];
 datetime lastNewsFetch = 0;
+int newsListRows = 0; // rows currently drawn by UpdateNewsList(), so shrinking lists clean up after themselves
 
 // Event times we've already fired the heads-up / close-trades alert for,
 // kept separate from newsEvents[] so an hourly recalendar refetch (which
@@ -397,7 +398,7 @@ void UpdateNews()
    if(TimeGMT() - lastNewsFetch >= 3600)
       FetchNewsEvents();
    CheckNewsAlerts();
-   UpdateNewsLabel();
+   UpdateNewsList();
 }
 
 //+------------------------------------------------------------------+
@@ -560,56 +561,87 @@ void FetchNewsEvents()
 }
 
 //+------------------------------------------------------------------+
-//| Countdown label: nearest red/orange event within the window, or  |
-//| LIVE with remaining time while an event is in progress           |
+//| Build one list row's text/color. Gray until NewsWindowMinutes    |
+//| before release (or while in progress), then red (High impact) or |
+//| orange (Medium); red titles get a leading '*' while highlighted. |
 //+------------------------------------------------------------------+
-void UpdateNewsLabel()
+string BuildNewsLine(const NewsEvent &ev, const datetime now, const int window, const int duration, color &outClr)
 {
-   string name = "News_indicator";
+   datetime t = ev.time;
+   bool live = (t <= now && now < t + duration);
+   bool imminent = (!live && t > now && t - now <= window);
+
+   string title = ev.title;
+   if(ev.isRed && (live || imminent))
+      title = "*" + title;
+   outClr = (live || imminent) ? (ev.isRed ? clrRed : clrOrange) : clrGray;
+
+   if(live)
+   {
+      int remain = (int)(t + duration - now);
+      return StringFormat("LIVE %02d:%02d  %s %s", remain / 60, remain % 60, ev.currency, title);
+   }
+   int togo = (int)(t - now);
+   return StringFormat("%02d:%02d:%02d  %s %s", togo / 3600, (togo % 3600) / 60, togo % 60, ev.currency, title);
+}
+
+//+------------------------------------------------------------------+
+//| List every red/orange event that hasn't fully passed yet, in a   |
+//| column on the right of the chart, below the Hx Helper panel and  |
+//| above the bottom of the chart. Soonest first; an event drops off |
+//| the list once it's NewsDurationMinutes past its release time.    |
+//+------------------------------------------------------------------+
+void UpdateNewsList()
+{
+   string prefix = "NewsList_";
    datetime now = TimeGMT();
    int window = NewsWindowMinutes * 60;
    int duration = NewsDurationMinutes * 60;
 
-   int liveIdx = -1, nextIdx = -1;
+   int order[];
    for(int i = 0; i < ArraySize(newsEvents); i++)
    {
-      datetime t = newsEvents[i].time;
-      if(t <= now && now < t + duration)
+      if(now >= newsEvents[i].time + duration)
+         continue; // fully passed - drop from the list
+      int sz = ArraySize(order);
+      ArrayResize(order, sz + 1);
+      order[sz] = i;
+   }
+   // newsEvents[] arrives time-sorted from the dashboard, but sort
+   // defensively since FetchNewsEvents() doesn't guarantee it itself
+   for(int i = 1; i < ArraySize(order); i++)
+   {
+      int cur = order[i];
+      datetime curT = newsEvents[cur].time;
+      int j = i - 1;
+      while(j >= 0 && newsEvents[order[j]].time > curT)
       {
-         if(liveIdx < 0 || t < newsEvents[liveIdx].time)
-            liveIdx = i;
+         order[j + 1] = order[j];
+         j--;
       }
-      else if(t > now && t - now <= window)
-      {
-         if(nextIdx < 0 || t < newsEvents[nextIdx].time)
-            nextIdx = i;
-      }
+      order[j + 1] = cur;
    }
 
-   if(liveIdx < 0 && nextIdx < 0)
-   {
-      ObjectDelete(0, name);
-      return;
-   }
+   const int rowHeight = 16;
+   const int startY = 640; // just below the Hx Helper panel (bottom edge at y=630, see OnInit)
+   int chartHeight = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0);
+   int maxRows = (chartHeight - startY - 20) / rowHeight;
+   if(maxRows < 0)
+      maxRows = 0;
+   int shown = MathMin(ArraySize(order), maxRows);
 
-   string text;
-   color clr;
-   if(liveIdx >= 0)
+   for(int i = 0; i < shown; i++)
    {
-      int remain = (int)(newsEvents[liveIdx].time + duration - now);
-      text = StringFormat("LIVE %02d:%02d  %s %s", remain / 60, remain % 60,
-                          newsEvents[liveIdx].currency, newsEvents[liveIdx].title);
-      clr = newsEvents[liveIdx].isRed ? clrRed : clrOrange;
+      color clr;
+      string text = BuildNewsLine(newsEvents[order[i]], now, window, duration, clr);
+      string name = prefix + IntegerToString(i);
+      CreateIndicator(500, startY + i * rowHeight, name, clr);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+      SetIndicatorText(name, text, clr);
    }
-   else
-   {
-      int togo = (int)(newsEvents[nextIdx].time - now);
-      text = StringFormat("%02d:%02d:%02d  %s %s", togo / 3600, (togo % 3600) / 60, togo % 60,
-                          newsEvents[nextIdx].currency, newsEvents[nextIdx].title);
-      clr = newsEvents[nextIdx].isRed ? clrRed : clrOrange;
-   }
-   CreateIndicator(500, 10, name, clr);
-   SetIndicatorText(name, text, clr);
+   for(int i = shown; i < newsListRows; i++)
+      ObjectDelete(0, prefix + IntegerToString(i));
+   newsListRows = shown;
 }
 
 //+------------------------------------------------------------------+
@@ -2233,7 +2265,9 @@ void DeleteLines()
    }
    ObjectsDeleteAll(0, "StepLine_", 0, OBJ_TREND);
    ObjectsDeleteAll(0, "LimitLine_", 0, OBJ_TREND);
-   ObjectsDeleteAll(0, "Vertical_", 0, OBJ_VLINE); 
+   ObjectsDeleteAll(0, "Vertical_", 0, OBJ_VLINE);
+   ObjectsDeleteAll(0, "NewsList_", 0, OBJ_LABEL);
+   newsListRows = 0;
 }
  
 void InitSpreadIndicator()
