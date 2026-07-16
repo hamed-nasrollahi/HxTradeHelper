@@ -46,10 +46,10 @@ input bool showSlipage = true;
 // News calendar (fetched through HxTradeUploader.dll from the dashboard's
 input bool ShowNews = false;              // Fetch calendar (orange + red events)
 input string NewsCurrencies = "USD";         // CSV filter e.g. "USD,EUR"; empty = chart symbol currencies
-input int NewsWindowMinutes = 2;          // Turn an event red/orange (from gray) this many minutes before it fires
+input int NewsWindowMinutes = 5;          // Turn an event red/orange (from gray) this many minutes before it fires
 input int NewsDurationMinutes = 15;       // How long an event counts as "in progress" after release
-input int NewsAlertMinutes = 15;          // Alert this many minutes before a major (High impact) event
-input int NewsCloseMinutes = 11;          // "Close trades" alert this many minutes before a major event
+input int NewsAlertMinutes = 20;          // Alert this many minutes before a major (High impact) event
+input int NewsCloseMinutes = 15;          // "Close trades" alert this many minutes before a major event
 
 input bool SummerTime = false;
 
@@ -635,7 +635,7 @@ void UpdateNewsList()
       color clr;
       string text = BuildNewsLine(newsEvents[order[i]], now, window, duration, clr);
       string name = prefix + IntegerToString(i);
-      CreateIndicator(500, startY + i * rowHeight, name, clr);
+      CreateIndicator(300, startY + i * rowHeight, name, clr);
       ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
       SetIndicatorText(name, text, clr);
    }
