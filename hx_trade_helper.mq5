@@ -124,7 +124,7 @@ input double tradeRisk   = 1.0;              // Risk per trade (R)
 
 DialogHx  AppWindow;
 CButton  btnTabTrade, btnTabTest, btnTabJournal;
-CButton  btnJournal, btnJournalAll, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
+CButton  btnJournal, btnJournalAll, btnJournalToday, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
 btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnExpApi, btnEnbl, btnReCalc, btnReset;
 CLabel   lblRepo;
 
@@ -270,7 +270,8 @@ void PopulateTabs()
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,100,70);
   CreateButton(btnJournalAll, "btnJournalAll", "Export to API",10,80,100,110);
-  CreateButton(btnCLR, "btnCLR", "CLR",10,120,100,140);
+  CreateButton(btnJournalToday, "btnJournalToday", "Today to API",10,120,100,150);
+  CreateButton(btnCLR, "btnCLR", "CLR",10,160,100,180);
 
   // Footer credit, always visible regardless of the active tab. Full URL
   // is on the tooltip since the panel is too narrow for it to fit as text
@@ -332,6 +333,7 @@ void ApplyTabVisibility()
    // Journal tab
    ShowButton(btnJournal, journal);
    ShowButton(btnJournalAll, journal);
+   ShowButton(btnJournalToday, journal);
    ShowButton(btnCLR, journal);
 }
 
@@ -586,10 +588,13 @@ string BuildNewsLine(const NewsEvent &ev, const datetime now, const int window, 
 }
 
 //+------------------------------------------------------------------+
-//| List every red/orange event that hasn't fully passed yet, in a   |
-//| column on the right of the chart, below the Hx Helper panel and  |
-//| above the bottom of the chart. Soonest first; an event drops off |
-//| the list once it's NewsDurationMinutes past its release time.    |
+//| List every red/orange event for today that hasn't fully passed   |
+//| yet, in a column on the right of the chart, below the Hx Helper  |
+//| panel and above the bottom of the chart. Soonest first; an event |
+//| drops off the list once it's NewsDurationMinutes past its        |
+//| release time. The feed covers the whole week, so events on other |
+//| days are filtered out here; "No news for today" is shown when    |
+//| nothing for today is left.                                       |
 //+------------------------------------------------------------------+
 void UpdateNewsList()
 {
@@ -598,11 +603,20 @@ void UpdateNewsList()
    int window = NewsWindowMinutes * 60;
    int duration = NewsDurationMinutes * 60;
 
+   MqlDateTime todayDt = {};
+   TimeToStruct(now, todayDt);
+
    int order[];
    for(int i = 0; i < ArraySize(newsEvents); i++)
    {
       if(now >= newsEvents[i].time + duration)
          continue; // fully passed - drop from the list
+
+      MqlDateTime evDt = {};
+      TimeToStruct(newsEvents[i].time, evDt);
+      if(evDt.year != todayDt.year || evDt.mon != todayDt.mon || evDt.day != todayDt.day)
+         continue; // only today's events
+
       int sz = ArraySize(order);
       ArrayResize(order, sz + 1);
       order[sz] = i;
@@ -628,16 +642,31 @@ void UpdateNewsList()
    int maxRows = (chartHeight - startY - 20) / rowHeight;
    if(maxRows < 0)
       maxRows = 0;
-   int shown = MathMin(ArraySize(order), maxRows);
 
-   for(int i = 0; i < shown; i++)
+   int shown;
+   if(ArraySize(order) == 0)
    {
-      color clr;
-      string text = BuildNewsLine(newsEvents[order[i]], now, window, duration, clr);
-      string name = prefix + IntegerToString(i);
-      CreateIndicator(300, startY + i * rowHeight, name, clr);
-      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
-      SetIndicatorText(name, text, clr);
+      shown = MathMin(1, maxRows);
+      if(shown > 0)
+      {
+         string name = prefix + "0";
+         CreateIndicator(300, startY, name, clrGray);
+         ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+         SetIndicatorText(name, "No news for today", clrGray);
+      }
+   }
+   else
+   {
+      shown = MathMin(ArraySize(order), maxRows);
+      for(int i = 0; i < shown; i++)
+      {
+         color clr;
+         string text = BuildNewsLine(newsEvents[order[i]], now, window, duration, clr);
+         string name = prefix + IntegerToString(i);
+         CreateIndicator(300, startY + i * rowHeight, name, clr);
+         ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+         SetIndicatorText(name, text, clr);
+      }
    }
    for(int i = shown; i < newsListRows; i++)
       ObjectDelete(0, prefix + IntegerToString(i));
@@ -846,6 +875,10 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       else if(sparam == "btnJournalAll")
       {
          ExportAllTrades();
+      }
+      else if(sparam == "btnJournalToday")
+      {
+         ExportTodaysTradesToApi();
       }
       else if(sparam == "btnYesterday")
       {
@@ -1700,6 +1733,38 @@ void ExportAllTrades()
 
    Alert(StringFormat("Journal Export: %d trade(s) from full history written to MQL5\\Files\\%s.%s",
          total, JournalBasePath + "\\trades_all_" + currentDate + ".json", uploadNote));
+}
+
+//+------------------------------------------------------------------+
+//| Send/update just today's trades: JSON + API upload, no shots.    |
+//| skip_existing is left off so already-uploaded open trades get    |
+//| refreshed on the dashboard as they progress or close.            |
+//+------------------------------------------------------------------+
+void ExportTodaysTradesToApi()
+{
+   Print("Today's API export started...");
+
+   JournalTrade trades[];
+   CollectTodaysTrades(trades);
+
+   int total = ArraySize(trades);
+   if(total == 0)
+   {
+      Alert("Journal Export: no trades found for today.");
+      return;
+   }
+
+   string json = BuildTradesJson(trades);
+
+   string currentDate = TimeToString(TimeCurrent(), TIME_DATE);
+   WriteTradesJson(json, JournalBasePath, "today_" + currentDate);
+
+   string uploadNote = "";
+   if(UploadToApi)
+      uploadNote = UploadTradesToApi(json) ? " Uploaded to dashboard." : " API upload failed - see Experts log.";
+
+   Alert(StringFormat("Journal Export: %d trade(s) from today written to MQL5\\Files\\%s.%s",
+         total, JournalBasePath + "\\trades_today_" + currentDate + ".json", uploadNote));
 }
 
 //+------------------------------------------------------------------+
