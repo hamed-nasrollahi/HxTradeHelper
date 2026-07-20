@@ -53,9 +53,10 @@ they stand out as navigation rather than tools.
 - **News countdown** — optionally fetches the weekly calendar from the
   dashboard's `/api/news` (through the uploader DLL; the dashboard itself
   caches and refreshes from ForexFactory at most once an hour), keeps only
-  orange/red-impact events for your currencies, and shows a corner
-  countdown to the next event — switching to a LIVE remaining-time display
-  while the event is in progress
+  today's orange/red-impact events for your currencies, and lists a
+  countdown to each — switching to a LIVE remaining-time display while an
+  event is in progress; shows "No news for today" once today's events
+  have all passed (or if there were none)
 - **Order blocks** — one-click rectangles for daily / H4 / H1 /
   support-resistance zones
 - **Moving averages** — EMA 20/60/200 toggles
@@ -100,6 +101,17 @@ One click on **Export All** backfills the journal:
    their strategy assignments) are never overwritten; only new trades are
    inserted. The API response reports `saved` and `skipped` counts in the
    Experts log.
+
+One click on **Today to API** re-syncs just today so far, without writing
+CSVs or screenshots:
+
+1. Collects **today's trades from the account history** (closed positions
+   plus still-open positions opened today) — all symbols, not just the
+   current chart
+2. Writes `trades_today_<date>.json` to the `TradesHistory` folder
+3. POSTs the JSON to the dashboard **without** `skip_existing`, so today's
+   trades are updated on the dashboard as they progress or close (unlike
+   **Export All**, which only backfills trades the database doesn't have yet)
 
 Output layout under `MQL5\Files`:
 
