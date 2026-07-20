@@ -650,7 +650,7 @@ void UpdateNewsList()
       if(shown > 0)
       {
          string name = prefix + "0";
-         CreateIndicator(300, startY, name, clrGray);
+         CreateIndicator(120, startY, name, clrGray);
          ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
          SetIndicatorText(name, "No news for today", clrGray);
       }
