@@ -38,6 +38,7 @@ input string NewsFeedUrl = "http://127.0.0.1:3000/api/news"; // Dashboard news e
 input string ApiKey = "";                                 // Import API key (X-Api-Key header)
 
 input bool UploadToApi = true;                            // Upload today's trades to the dashboard
+input bool SaveLocalJson = false;                         // Also write the JSON export to MQL5\Files locally
 
 input bool showCandleTime = true;
 input bool showSessions = false;
@@ -1725,14 +1726,18 @@ void ExportAllTrades()
    string json = BuildTradesJson(trades, true);
 
    string currentDate = TimeToString(TimeCurrent(), TIME_DATE);
-   WriteTradesJson(json, JournalBasePath, "all_" + currentDate);
+   string localNote = "";
+   if(SaveLocalJson)
+   {
+      WriteTradesJson(json, JournalBasePath, "all_" + currentDate);
+      localNote = " Written to MQL5\\Files\\" + JournalBasePath + "\\trades_all_" + currentDate + ".json.";
+   }
 
    string uploadNote = "";
    if(UploadToApi)
       uploadNote = UploadTradesToApi(json) ? " Uploaded to dashboard (existing position ids are skipped there)." : " API upload failed - see Experts log.";
 
-   Alert(StringFormat("Journal Export: %d trade(s) from full history written to MQL5\\Files\\%s.%s",
-         total, JournalBasePath + "\\trades_all_" + currentDate + ".json", uploadNote));
+   Alert(StringFormat("Journal Export: %d trade(s) from full history processed.%s%s", total, localNote, uploadNote));
 }
 
 //+------------------------------------------------------------------+
@@ -1757,14 +1762,18 @@ void ExportTodaysTradesToApi()
    string json = BuildTradesJson(trades);
 
    string currentDate = TimeToString(TimeCurrent(), TIME_DATE);
-   WriteTradesJson(json, JournalBasePath, "today_" + currentDate);
+   string localNote = "";
+   if(SaveLocalJson)
+   {
+      WriteTradesJson(json, JournalBasePath, "today_" + currentDate);
+      localNote = " Written to MQL5\\Files\\" + JournalBasePath + "\\trades_today_" + currentDate + ".json.";
+   }
 
    string uploadNote = "";
    if(UploadToApi)
       uploadNote = UploadTradesToApi(json) ? " Uploaded to dashboard." : " API upload failed - see Experts log.";
 
-   Alert(StringFormat("Journal Export: %d trade(s) from today written to MQL5\\Files\\%s.%s",
-         total, JournalBasePath + "\\trades_today_" + currentDate + ".json", uploadNote));
+   Alert(StringFormat("Journal Export: %d trade(s) from today processed.%s%s", total, localNote, uploadNote));
 }
 
 //+------------------------------------------------------------------+
