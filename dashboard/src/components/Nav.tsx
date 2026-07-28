@@ -24,7 +24,7 @@ export default function Nav() {
   };
   return (
     <header className="border-b" style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}>
-      <div className="mx-auto flex max-w-6xl items-center gap-1 px-4 py-3">
+      <div className="mx-auto flex max-w-[96rem] items-center gap-1 px-4 py-3">
         <span className="mr-4 text-base font-semibold">HxTradeHelper</span>
         {LINKS.map((l) => {
           const active = pathname === l.href;

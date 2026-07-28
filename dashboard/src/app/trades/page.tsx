@@ -112,34 +112,44 @@ export default function TradesPage() {
       </label>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-max min-w-full text-sm">
           <thead>
-            <tr className="text-left text-xs" style={{ color: "var(--ink-muted)" }}>
-              <th className="px-3 py-2 font-medium">Closed</th>
-              <th className="px-3 py-2 font-medium">Symbol</th>
-              <th className="px-3 py-2 font-medium">Type</th>
-              <th className="px-3 py-2 font-medium">Result</th>
-              <th className="px-3 py-2 text-right font-medium">Entry</th>
-              <th className="px-3 py-2 text-right font-medium">SL</th>
-              <th className="px-3 py-2 text-right font-medium">TP</th>
-              <th className="px-3 py-2 text-right font-medium">Close</th>
-              <th className="px-3 py-2 text-right font-medium">R:R</th>
-              <th className="px-3 py-2 text-right font-medium">Profit</th>
-              <th className="px-3 py-2 font-medium">Strategy</th>
-              <th className="px-3 py-2 text-center font-medium">Entry OK</th>
-              <th className="px-3 py-2 text-center font-medium">Exit OK</th>
-              <th className="px-3 py-2 font-medium">Mistake</th>
+            <tr className="whitespace-nowrap text-left text-xs" style={{ color: "var(--ink-muted)" }}>
+              <th className="px-2 py-2 font-medium">Closed</th>
+              <th className="px-2 py-2 font-medium">Symbol</th>
+              <th className="px-2 py-2 font-medium">Type</th>
+              <th className="px-2 py-2 font-medium">Result</th>
+              <th className="px-2 py-2 text-right font-medium">Entry</th>
+              <th className="px-2 py-2 text-right font-medium">SL</th>
+              <th className="px-2 py-2 text-right font-medium">TP</th>
+              <th className="px-2 py-2 text-right font-medium">Close</th>
+              <th className="px-2 py-2 text-right font-medium">R:R</th>
+              <th className="px-2 py-2 text-right font-medium">Profit</th>
+              <th className="px-2 py-2 font-medium">Strategy</th>
+              <th className="px-2 py-2 text-center font-medium leading-tight">
+                Entry
+                <br />
+                OK
+              </th>
+              <th className="px-2 py-2 text-center font-medium leading-tight">
+                Exit
+                <br />
+                OK
+              </th>
+              <th className="px-2 py-2 font-medium">Mistake</th>
             </tr>
           </thead>
           <tbody>
             {trades.map((t) => (
               <tr key={t.id} style={{ borderTop: "1px solid var(--border)" }}>
-                <td className="tnum whitespace-nowrap px-3 py-2 text-xs" style={{ color: "var(--ink-2)" }}>
-                  {(t.close_time || t.open_time).slice(0, 16)}
+                <td className="tnum whitespace-nowrap px-2 py-2 text-xs leading-tight" style={{ color: "var(--ink-2)" }}>
+                  {(t.close_time || t.open_time).slice(0, 10)}
+                  <br />
+                  <span style={{ color: "var(--ink-muted)" }}>{(t.close_time || t.open_time).slice(11, 16)}</span>
                 </td>
-                <td className="px-3 py-2 font-medium">{t.symbol}</td>
-                <td className="px-3 py-2">{t.type}</td>
-                <td className="px-3 py-2">
+                <td className="px-2 py-2 font-medium">{t.symbol}</td>
+                <td className="px-2 py-2">{t.type}</td>
+                <td className="px-2 py-2">
                   <span
                     className="rounded-full px-2 py-0.5 text-xs font-medium"
                     style={{
@@ -151,17 +161,17 @@ export default function TradesPage() {
                     {t.result}
                   </span>
                 </td>
-                <td className="tnum px-3 py-2 text-right">{fmtNum(t.entry_price, 5)}</td>
-                <td className="tnum px-3 py-2 text-right">{t.stop_loss ? fmtNum(t.stop_loss, 5) : "-"}</td>
-                <td className="tnum px-3 py-2 text-right">{t.take_profit ? fmtNum(t.take_profit, 5) : "-"}</td>
-                <td className="tnum px-3 py-2 text-right">{t.close_price ? fmtNum(t.close_price, 5) : "-"}</td>
-                <td className="tnum px-3 py-2 text-right">{t.rr || "-"}</td>
-                <td className="tnum px-3 py-2 text-right font-medium" style={{ color: profitColor(Number(t.profit)) }}>
+                <td className="tnum px-2 py-2 text-right">{fmtNum(t.entry_price, 5)}</td>
+                <td className="tnum px-2 py-2 text-right">{t.stop_loss ? fmtNum(t.stop_loss, 5) : "-"}</td>
+                <td className="tnum px-2 py-2 text-right">{t.take_profit ? fmtNum(t.take_profit, 5) : "-"}</td>
+                <td className="tnum px-2 py-2 text-right">{t.close_price ? fmtNum(t.close_price, 5) : "-"}</td>
+                <td className="tnum px-2 py-2 text-right">{t.rr || "-"}</td>
+                <td className="tnum px-2 py-2 text-right font-medium" style={{ color: profitColor(Number(t.profit)) }}>
                   {fmtMoney(Number(t.profit))}
                 </td>
-                <td className="px-3 py-2">
+                <td className="whitespace-nowrap px-2 py-2">
                   <select
-                    className="input"
+                    className="input w-full"
                     value={t.strategy_id ? String(t.strategy_id) : ""}
                     disabled={saving === t.id}
                     onChange={(e) => assign(t, e.target.value)}
@@ -174,7 +184,7 @@ export default function TradesPage() {
                     ))}
                   </select>
                 </td>
-                <td className="px-3 py-2 text-center">
+                <td className="px-2 py-2 text-center">
                   <input
                     type="checkbox"
                     checked={!!t.entry_correct}
@@ -182,7 +192,7 @@ export default function TradesPage() {
                     onChange={(e) => setReviewFlag(t, "entry_correct", e.target.checked)}
                   />
                 </td>
-                <td className="px-3 py-2 text-center">
+                <td className="px-2 py-2 text-center">
                   <input
                     type="checkbox"
                     checked={!!t.exit_correct}
@@ -190,9 +200,9 @@ export default function TradesPage() {
                     onChange={(e) => setReviewFlag(t, "exit_correct", e.target.checked)}
                   />
                 </td>
-                <td className="px-3 py-2">
+                <td className="whitespace-nowrap px-2 py-2">
                   <select
-                    className="input"
+                    className="input w-full"
                     value={t.mistake_id ? String(t.mistake_id) : ""}
                     disabled={saving === t.id || (!!t.entry_correct && !!t.exit_correct)}
                     onChange={(e) => setMistake(t, e.target.value)}
