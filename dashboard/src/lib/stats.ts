@@ -2,6 +2,7 @@ import {
   BreakdownGroup,
   EquityPoint,
   GroupDimension,
+  MonthWinRate,
   Summary,
   TradeRecord,
 } from "./types";
@@ -117,6 +118,40 @@ export function computeSummary(trades: TradeRecord[]): Summary {
     activeDays: days.size,
     avgTradesPerDay: days.size > 0 ? total / days.size : 0,
   };
+}
+
+/**
+ * Win rate for the last `count` calendar months, taken from groups produced by
+ * `computeBreakdown(trades, ["month"])`. The window ends at the newest month
+ * present in the data (the current month when there is none), so it follows the
+ * active filters instead of showing six empty tiles for an older date range.
+ * Months without trades are kept in the series with a null win rate.
+ */
+export function recentMonthWinRates(monthGroups: BreakdownGroup[], count = 6): MonthWinRate[] {
+  const byKey = new Map(monthGroups.map((g) => [g.key, g]));
+  const anchor = monthGroups.length
+    ? monthGroups[monthGroups.length - 1].key
+    : new Date().toISOString().slice(0, 7);
+  const year = Number(anchor.slice(0, 4));
+  const month = Number(anchor.slice(5, 7));
+
+  const out: MonthWinRate[] = [];
+  for (let back = count - 1; back >= 0; back--) {
+    const d = new Date(Date.UTC(year, month - 1 - back, 1));
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const g = byKey.get(key);
+    const decided = g ? g.wins + g.losses : 0;
+    out.push({
+      key,
+      label: `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`,
+      trades: g ? g.trades : 0,
+      wins: g ? g.wins : 0,
+      losses: g ? g.losses : 0,
+      winRate: decided > 0 ? g!.winRate : null,
+      netProfit: g ? g.netProfit : 0,
+    });
+  }
+  return out;
 }
 
 export function computeEquity(trades: TradeRecord[]): EquityPoint[] {

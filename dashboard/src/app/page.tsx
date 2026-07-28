@@ -6,8 +6,10 @@ import KpiCard from "@/components/KpiCard";
 import ErrorBanner from "@/components/ErrorBanner";
 import EquityChart from "@/components/charts/EquityChart";
 import PnlBarChart from "@/components/charts/PnlBarChart";
+import WinRateMonths from "@/components/charts/WinRateMonths";
 import { useMeta } from "@/components/useMeta";
 import { filterQuery, fmtMoney, fmtNum, getJSON, profitColor } from "@/lib/client";
+import { recentMonthWinRates } from "@/lib/stats";
 import { BreakdownGroup, EquityPoint, Summary, TradeFilters } from "@/lib/types";
 
 export default function OverviewPage() {
@@ -35,6 +37,7 @@ export default function OverviewPage() {
   }, [filters]);
 
   const s = summary;
+  const monthlyWinRate = recentMonthWinRates(monthly, 6);
   const streak =
     s === null || s.currentStreak === 0
       ? "-"
@@ -102,6 +105,13 @@ export default function OverviewPage() {
               Net P/L by month
             </h2>
             <PnlBarChart groups={monthly} />
+          </div>
+
+          <div className="card mt-6 p-4">
+            <h2 className="mb-3 text-sm font-medium" style={{ color: "var(--ink-2)" }}>
+              Win rate by month (last 6 months)
+            </h2>
+            <WinRateMonths months={monthlyWinRate} />
           </div>
         </>
       ) : !error ? (

@@ -111,6 +111,16 @@ export interface BreakdownGroup {
   color?: string;
 }
 
+export interface MonthWinRate {
+  key: string; // "2026-07"
+  label: string; // "Jul 2026"
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number | null; // 0..100, null when the month has no decided trades
+  netProfit: number;
+}
+
 export interface EquityPoint {
   time: string;
   equity: number;
