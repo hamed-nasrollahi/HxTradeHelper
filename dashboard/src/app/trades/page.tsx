@@ -14,8 +14,10 @@ export default function TradesPage() {
   const [trades, setTrades] = useState<TradeRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = () => {
+    setRefreshing(true);
     getJSON<{ trades: TradeRecord[] }>(
       `/api/trades${filterQuery(filters, includeOpen ? { includeOpen: "1" } : {})}`
     )
@@ -23,7 +25,8 @@ export default function TradesPage() {
         setTrades(r.trades);
         setError(null);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e.message))
+      .finally(() => setRefreshing(false));
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,7 +106,12 @@ export default function TradesPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold">Trades</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Trades</h1>
+        <button className="btn-ghost" onClick={load} disabled={refreshing}>
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
       {error ? <ErrorBanner message={error} /> : null}
       <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} accounts={meta.accounts} strategies={meta.strategies} />
       <label className="mb-3 flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
