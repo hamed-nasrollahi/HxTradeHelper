@@ -575,7 +575,7 @@ string BuildNewsLine(const NewsEvent &ev, const datetime now, const int window, 
    bool imminent = (!live && t > now && t - now <= window);
 
    string title = ev.title;
-   if(ev.isRed && (live || imminent))
+   if(ev.isRed )
       title = "*" + title;
    outClr = (live || imminent) ? (ev.isRed ? clrRed : clrOrange) : clrGray;
 
@@ -664,7 +664,7 @@ void UpdateNewsList()
          color clr;
          string text = BuildNewsLine(newsEvents[order[i]], now, window, duration, clr);
          string name = prefix + IntegerToString(i);
-         CreateIndicator(300, startY + i * rowHeight, name, clr);
+         CreateIndicator(250, startY + i * rowHeight, name, clr);
          ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
          SetIndicatorText(name, text, clr);
       }
@@ -1301,7 +1301,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          datetime time_end = iTime(NULL, 0, middleBar);
          double price_top = iHigh(NULL, 0, middleBar);
          double price_bottom = iLow(NULL, 0, middleBar);
-         CreateFibo("Fib3_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrGray, time_start, price_top, time_end, price_bottom);
+         CreateFibo("Fib3_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrDarkBlue, time_start, price_top, time_end, price_bottom);
       }
    }
     
