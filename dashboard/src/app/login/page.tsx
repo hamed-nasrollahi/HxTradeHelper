@@ -1,14 +1,16 @@
 "use client";
 
 import { FormEvent, Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AuthCard, Field, GoogleButton } from "@/components/AuthCard";
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [user, setUser] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(params.get("error") || "");
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: FormEvent) => {
@@ -23,10 +25,14 @@ function LoginForm() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
+        if (body?.needsVerification) {
+          router.push(`/register?verify=${encodeURIComponent(body.email || user)}`);
+          return;
+        }
         throw new Error(body?.error || "Login failed");
       }
       const next = params.get("next");
-      router.replace(next && next.startsWith("/") ? next : "/");
+      router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
       router.refresh();
     } catch (e: any) {
       setError(e.message);
@@ -35,53 +41,41 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-[70vh] items-center justify-center">
-      <form className="card w-80 p-6" onSubmit={submit}>
-        <h1 className="mb-1 text-lg font-semibold">HxTradeHelper</h1>
-        <p className="mb-5 text-xs" style={{ color: "var(--ink-muted)" }}>
-          Sign in to the dashboard
-        </p>
+    <AuthCard title="HxTradeHelper" subtitle="Sign in to the dashboard">
+      <form onSubmit={submit}>
         <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--ink-2)" }}>
-            Username
-            <input
-              className="input"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-              autoFocus
-              autoComplete="username"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--ink-2)" }}>
-            Password
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
-          </label>
+          <Field
+            label="Email or username"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            autoFocus
+            autoComplete="username"
+          />
+          <Field
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
         </div>
         <button className="btn mt-5 w-full" type="submit" disabled={busy}>
           {busy ? "Signing in..." : "Sign in"}
         </button>
-        {error ? (
-          <p className="mt-3 text-sm" style={{ color: "var(--bad-text)" }}>
-            {error}
-          </p>
-        ) : null}
-        <a
-          className="mt-5 block text-center text-xs"
-          style={{ color: "var(--ink-muted)" }}
-          href="https://github.com/hamed-nasrollahi/HxTradeHelper"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          github.com/hamed-nasrollahi/HxTradeHelper
-        </a>
       </form>
-    </div>
+      {error ? (
+        <p className="mt-3 text-sm" style={{ color: "var(--bad-text)" }}>
+          {error}
+        </p>
+      ) : null}
+      <GoogleButton />
+      <p className="mt-4 text-center text-xs" style={{ color: "var(--ink-2)" }}>
+        No account?{" "}
+        <Link href="/register" className="underline" style={{ color: "var(--s1)" }}>
+          Create one
+        </Link>
+      </p>
+    </AuthCard>
   );
 }
 

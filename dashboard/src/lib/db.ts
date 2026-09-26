@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import { DbSettings, loadSettings } from "./settings";
 import { BacktestBatch, BacktestRecord, TradeRecord } from "./types";
+import { ensureSchema } from "./migrate";
 
 let pool: mysql.Pool | null = null;
 let poolKey = "";
@@ -27,6 +28,7 @@ export async function getPool(): Promise<mysql.Pool> {
 
 export async function query<T = any>(sql: string, args: any[] = []): Promise<T[]> {
   const p = await getPool();
+  await ensureSchema(p, poolKey);
   const [rows] = await p.query(sql, args);
   return rows as T[];
 }
@@ -66,9 +68,12 @@ interface WhereClause {
   args: any[];
 }
 
-export function buildTradeWhere(params: URLSearchParams, closedOnly: boolean): WhereClause {
-  const clauses: string[] = ["t.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0)"];
-  const args: any[] = [];
+export function buildTradeWhere(params: URLSearchParams, closedOnly: boolean, userId: number): WhereClause {
+  const clauses: string[] = [
+    "t.user_id = ?",
+    "t.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0 AND user_id = ?)",
+  ];
+  const args: any[] = [userId, userId];
   if (closedOnly) {
     clauses.push("t.is_open = 0", "t.close_time IS NOT NULL");
   }
@@ -120,17 +125,20 @@ FROM trades t
 LEFT JOIN strategies s ON s.id = t.strategy_id
 LEFT JOIN mistakes m ON m.id = t.mistake_id`;
 
-export async function fetchTrades(params: URLSearchParams, closedOnly: boolean): Promise<TradeRecord[]> {
-  const { where, args } = buildTradeWhere(params, closedOnly);
+export async function fetchTrades(params: URLSearchParams, closedOnly: boolean, userId: number): Promise<TradeRecord[]> {
+  const { where, args } = buildTradeWhere(params, closedOnly, userId);
   return query<TradeRecord>(
     `${TRADE_SELECT} ${where} ORDER BY COALESCE(t.close_time, t.open_time), t.id`,
     args
   );
 }
 
-export async function fetchBacktests(params: URLSearchParams): Promise<BacktestRecord[]> {
-  const clauses: string[] = ["b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0)"];
-  const args: any[] = [];
+export async function fetchBacktests(params: URLSearchParams, userId: number): Promise<BacktestRecord[]> {
+  const clauses: string[] = [
+    "b.user_id = ?",
+    "b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0 AND user_id = ?)",
+  ];
+  const args: any[] = [userId, userId];
   const add = (sql: string, value: any) => { clauses.push(sql); args.push(value); };
   if (params.get("backtestId")) add("b.id = ?", Number(params.get("backtestId")));
   if (params.get("from")) add("d.trade_time >= ?", `${params.get("from")} 00:00:00`);
@@ -155,7 +163,7 @@ export async function fetchBacktests(params: URLSearchParams): Promise<BacktestR
     ${where} ORDER BY d.trade_time, d.id`, args);
 }
 
-export async function fetchBacktestBatches(): Promise<BacktestBatch[]> {
+export async function fetchBacktestBatches(userId: number): Promise<BacktestBatch[]> {
   return query<BacktestBatch>(`
     SELECT b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
            b.created_at, s.name AS strategy_name, s.color AS strategy_color,
@@ -163,8 +171,33 @@ export async function fetchBacktestBatches(): Promise<BacktestBatch[]> {
     FROM backtests b
     LEFT JOIN strategies s ON s.id = b.strategy_id
     LEFT JOIN backtest_data d ON d.backtest_id = b.id
-    WHERE b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0)
+    WHERE b.user_id = ?
+      AND b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0 AND user_id = ?)
     GROUP BY b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
              b.created_at, s.name, s.color
-    ORDER BY b.created_at DESC, b.id DESC`);
+    ORDER BY b.created_at DESC, b.id DESC`, [userId, userId]);
+}
+
+/**
+ * An MT5 account belongs to whichever user first uploaded it. Imports for
+ * an account another user already owns are refused, so the
+ * (account, position_id) / (batch_id, account) upserts can never touch
+ * someone else's rows.
+ */
+export async function accountOwnedByOther(account: number, userId: number): Promise<boolean> {
+  const rows = await query(
+    `SELECT 1 FROM trades WHERE account = ? AND user_id <> ?
+     UNION ALL
+     SELECT 1 FROM backtests WHERE account = ? AND user_id <> ?
+     LIMIT 1`,
+    [account, userId, account, userId]
+  );
+  return rows.length > 0;
+}
+
+/** True when the strategy/mistake id is null or belongs to the user. */
+export async function ownsRow(table: "strategies" | "mistakes", id: number | null, userId: number): Promise<boolean> {
+  if (id === null) return true;
+  const rows = await query(`SELECT 1 FROM ${table} WHERE id = ? AND user_id = ?`, [id, userId]);
+  return rows.length > 0;
 }

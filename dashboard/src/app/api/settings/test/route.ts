@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadSettings } from "@/lib/settings";
 import { testConnection } from "@/lib/db";
+import { errorResponse, requireAdmin } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireAdmin(req);
+  } catch (e) {
+    return errorResponse(e, "forbidden");
+  }
   const body = await req.json().catch(() => ({}));
   const current = loadSettings();
   const candidate = {

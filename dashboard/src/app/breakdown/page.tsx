@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Filters from "@/components/Filters";
 import ErrorBanner from "@/components/ErrorBanner";
 import PnlBarChart from "@/components/charts/PnlBarChart";
@@ -156,7 +157,21 @@ export default function BreakdownPage() {
                     {g.label}
                   </span>
                 </td>
-                <td className="tnum px-4 py-2 text-right">{g.trades}</td>
+                <td className="tnum px-4 py-2 text-right">
+                  <Link
+                    href={`/trades${filterQuery(filters, {
+                      groupBy: groupBys.join(","),
+                      group: g.key,
+                      groupLabel: g.label,
+                      ...(excludeMistakes ? { excludeMistakes: "1" } : {}),
+                    })}`}
+                    className="underline decoration-dotted underline-offset-2"
+                    style={{ color: "var(--s1)" }}
+                    title="Show these trades"
+                  >
+                    {g.trades}
+                  </Link>
+                </td>
                 <td className="tnum px-4 py-2 text-right">{fmtNum(g.winRate, 1)}%</td>
                 <td className="tnum px-4 py-2 text-right" style={{ color: profitColor(g.netProfit) }}>
                   {fmtMoney(g.netProfit)}

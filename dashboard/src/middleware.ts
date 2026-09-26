@@ -1,38 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, sessionToken } from "@/lib/auth";
-import { loadSettings } from "@/lib/settings";
+import { SESSION_COOKIE, USER_HEADER, verifySessionToken } from "@/lib/auth";
 
 /**
- * Session-cookie auth for the browser dashboard. /login and /api/login are
- * always open (so you can sign in). Every other /api/* route additionally
- * accepts X-Api-Key as an alternate credential (checked against the import
- * API key from Settings), so scripts and the MT5 indicator can call any
- * endpoint without a browser session. /api/import and /api/news are called
- * by the indicator, which has no session cookie: they stay reachable
- * without one, gated purely by the key - open when no key is configured
- * (matching the pre-existing behavior), required once one is set.
+ * Session-cookie auth for the browser dashboard. The verified user id is
+ * forwarded to route handlers in the x-hx-user-id request header (any
+ * client-supplied value is stripped first); handlers resolve and scope
+ * everything through requireUser() in src/lib/session.ts, which also
+ * rejects disabled accounts.
+ *
+ * Sign-in / sign-up pages and /api/auth/* are always open. Every other
+ * /api/* route also accepts an X-Api-Key header (a user's personal key, or
+ * the legacy global import key = admin); that key is checked in the route,
+ * since the edge runtime can't reach the database. /api/import,
+ * /api/backtests/import and /api/news are called by the MT5 indicator and
+ * are always passed through - the route decides (open while no global key
+ * is configured, matching the pre-multi-user behavior).
  */
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
-  const alwaysOpen = pathname === "/login" || pathname === "/api/login";
+  const authPage = pathname === "/login" || pathname === "/register";
+  const alwaysOpen =
+    authPage || pathname === "/api/login" || pathname === "/api/logout" || pathname.startsWith("/api/auth/");
   const headless = pathname === "/api/import" || pathname === "/api/backtests/import" || pathname === "/api/news";
 
-  const apiKey = loadSettings().importApiKey;
-  const validKey = !!apiKey && req.headers.get("x-api-key") === apiKey;
-  const authedSession = req.cookies.get(SESSION_COOKIE)?.value === (await sessionToken());
+  const userId = await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value);
+  const headers = new Headers(req.headers);
+  headers.delete(USER_HEADER);
+  if (userId) headers.set(USER_HEADER, String(userId));
+  const pass = () => NextResponse.next({ request: { headers } });
 
-  if (authedSession && pathname === "/login") {
+  if (userId && authPage) {
     return NextResponse.redirect(new URL("/", req.url));
   }
-  if (alwaysOpen) return NextResponse.next();
-
-  if (headless) {
-    if (authedSession || !apiKey || validKey) return NextResponse.next();
-    return NextResponse.json({ error: "invalid api key" }, { status: 401 });
-  }
-
-  if (authedSession || (isApi && validKey)) return NextResponse.next();
+  if (alwaysOpen || headless) return pass();
+  if (userId || (isApi && req.headers.get("x-api-key"))) return pass();
 
   if (isApi) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
