@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getJSON, sendJSON } from "@/lib/client";
+import { Me, useMe } from "@/components/useMe";
 
 interface Form {
   host: string;
@@ -12,7 +13,148 @@ interface Form {
   importApiKey: string;
 }
 
+type Status = { ok: boolean; message: string } | null;
+
+function StatusLine({ status }: { status: Status }) {
+  return status ? (
+    <p className="mt-3 text-sm" style={{ color: status.ok ? "var(--good-text)" : "var(--bad-text)" }}>
+      {status.message}
+    </p>
+  ) : null;
+}
+
+/** Personal API key for the MT5 indicator + password change. */
+function AccountCard({ me, setMe }: { me: Me; setMe: (m: Me) => void }) {
+  const [showKey, setShowKey] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [status, setStatus] = useState<Status>(null);
+  const [busy, setBusy] = useState(false);
+
+  const act = async (body: Record<string, string>, done: string) => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const r = await sendJSON<{ user: Me }>("/api/auth/me", "POST", body);
+      setMe(r.user);
+      setStatus({ ok: true, message: done });
+      setCurrent("");
+      setNext("");
+    } catch (e: any) {
+      setStatus({ ok: false, message: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = () => {
+    if (confirm("Delete your API key? Uploads using it will be rejected until you create a new one."))
+      act({ action: "revokeKey" }, "API key deleted.");
+  };
+
+  const regenerate = () => {
+    if (confirm("Generate a new API key? The old key stops working immediately - update the indicator's ApiKey input."))
+      act({ action: "regenerateKey" }, "New API key generated.");
+  };
+
+  return (
+    <div className="card mb-6 max-w-xl p-5">
+      <h2 className="mb-1 text-sm font-medium">My account</h2>
+      <p className="mb-4 text-xs" style={{ color: "var(--ink-muted)" }}>
+        Signed in as <strong>{me.name || me.email || me.username}</strong>
+        {me.email ? ` (${me.email})` : ""}
+        {me.google ? " · Google linked" : ""}
+        {me.isAdmin ? " · admin" : ""}
+      </p>
+
+      <h3 className="mb-1 text-xs font-medium" style={{ color: "var(--ink-2)" }}>
+        Personal API key
+      </h3>
+      <p className="mb-2 text-xs" style={{ color: "var(--ink-muted)" }}>
+        Paste this into the MT5 indicator&apos;s <code>ApiKey</code> input: trades it uploads to{" "}
+        <code>/api/import</code> are saved to your account. Uploads without a valid key are rejected.
+      </p>
+      {!me.apiKey ? (
+        <button className="btn" onClick={() => act({ action: "createKey" }, "API key created.")} disabled={busy}>
+          Create API key
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input className="input w-80 font-mono text-xs" readOnly value={showKey ? me.apiKey || "" : "•".repeat(24)} />
+          <button className="btn-ghost" onClick={() => setShowKey((v) => !v)}>
+            {showKey ? "Hide" : "Show"}
+          </button>
+          <button
+            className="btn-ghost"
+            onClick={() => navigator.clipboard?.writeText(me.apiKey || "").then(() => setStatus({ ok: true, message: "Copied." }))}
+          >
+            Copy
+          </button>
+          <button className="btn-ghost" onClick={regenerate} disabled={busy}>
+            Regenerate
+          </button>
+          <button className="btn-ghost" onClick={revoke} disabled={busy} style={{ color: "var(--bad-text)" }}>
+            Delete
+          </button>
+        </div>
+      )}
+
+      {me.envAdmin ? (
+        <p className="mt-5 text-xs" style={{ color: "var(--ink-muted)" }}>
+          This is the main admin account: its username and password are DASHBOARD_USER / DASHBOARD_PASSWORD in .env.
+        </p>
+      ) : (
+        <>
+          <h3 className="mb-2 mt-5 text-xs font-medium" style={{ color: "var(--ink-2)" }}>
+            {me.hasPassword ? "Change password" : "Set a password (to also sign in with email)"}
+          </h3>
+          <div className="flex flex-col gap-3">
+            {me.hasPassword ? (
+              <input
+                className="input w-72"
+                type="password"
+                placeholder="Current password"
+                value={current}
+                autoComplete="current-password"
+                onChange={(e) => setCurrent(e.target.value)}
+              />
+            ) : null}
+            <input
+              className="input w-72"
+              type="password"
+              placeholder="New password (min. 8 characters)"
+              value={next}
+              autoComplete="new-password"
+              onChange={(e) => setNext(e.target.value)}
+            />
+          </div>
+          <button
+            className="btn mt-3"
+            disabled={busy || next.length < 8}
+            onClick={() => act({ action: "changePassword", current, next }, "Password updated.")}
+          >
+            Save password
+          </button>
+        </>
+      )}
+      <StatusLine status={status} />
+    </div>
+  );
+}
+
 export default function SettingsPage() {
+  const { me, setMe } = useMe();
+  return (
+    <div>
+      <h1 className="mb-4 text-xl font-semibold">Settings</h1>
+      {me ? <AccountCard me={me} setMe={setMe} /> : null}
+      {me?.isAdmin ? <DatabaseSettings /> : null}
+    </div>
+  );
+}
+
+/** Server-wide settings, admins only. */
+function DatabaseSettings() {
   const [form, setForm] = useState<Form>({
     host: "",
     port: "3306",
@@ -85,9 +227,8 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold">Settings</h1>
       <div className="card max-w-xl p-5">
-        <h2 className="mb-1 text-sm font-medium">MariaDB connection</h2>
+        <h2 className="mb-1 text-sm font-medium">MariaDB connection (admin)</h2>
         <p className="mb-4 text-xs" style={{ color: "var(--ink-muted)" }}>
           Credentials are stored server-side in the dashboard&apos;s data volume, never in the browser.
         </p>
@@ -103,17 +244,18 @@ export default function SettingsPage() {
             hasPassword ? "•••••• (leave empty to keep current)" : ""
           )}
         </div>
-        <h2 className="mb-1 mt-6 text-sm font-medium">Journal import</h2>
+        <h2 className="mb-1 mt-6 text-sm font-medium">Legacy global import key</h2>
         <p className="mb-4 text-xs" style={{ color: "var(--ink-muted)" }}>
-          The MT5 indicator uploads to <code>POST /api/import</code>. When a key is set here, requests
-          must send it in the <code>X-Api-Key</code> header (the indicator&apos;s <code>ApiKey</code> input).
+          The key used before multi-user support. Uploads sent with it (in the <code>X-Api-Key</code> header)
+          are saved to the main admin account. Uploads without a valid key are always rejected. Each
+          user&apos;s personal key (above) always works.
         </p>
         <div className="flex flex-col gap-3">
           {field(
             "Import API key",
             "importApiKey",
             "password",
-            hasImportKey ? "•••••• (leave empty to keep current)" : "empty = no key required"
+            hasImportKey ? "•••••• (leave empty to keep current)" : "empty = no global key (personal keys only)"
           )}
         </div>
         <div className="mt-4 flex gap-2">

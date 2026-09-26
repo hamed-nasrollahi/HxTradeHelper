@@ -128,3 +128,62 @@ CREATE TABLE IF NOT EXISTS account_visibility (
 
 -- GRANT SELECT, INSERT, UPDATE ON hx_trades.account_visibility TO 'hx'@'localhost';
 -- FLUSH PRIVILEGES;
+
+-- Multi-user accounts. The dashboard applies this block automatically on
+-- first start (src/lib/migrate.ts) when its DB user may ALTER/CREATE;
+-- otherwise run this file manually. Nothing here deletes data: existing
+-- rows get user_id = 1, the admin who signs in with DASHBOARD_USER /
+-- DASHBOARD_PASSWORD from .env.
+CREATE TABLE IF NOT EXISTS users (
+    id                INT AUTO_INCREMENT PRIMARY KEY,
+    email             VARCHAR(255) DEFAULT NULL,
+    username          VARCHAR(64)  DEFAULT NULL,
+    name              VARCHAR(128) DEFAULT NULL,
+    password_hash     VARCHAR(255) DEFAULT NULL,   -- scrypt; NULL for Google-only / .env admin
+    google_sub        VARCHAR(64)  DEFAULT NULL,   -- Google account id
+    email_verified    TINYINT(1)   NOT NULL DEFAULT 0,
+    is_admin          TINYINT(1)   NOT NULL DEFAULT 0,
+    disabled          TINYINT(1)   NOT NULL DEFAULT 0,
+    api_key           VARCHAR(64)  DEFAULT NULL,   -- personal X-Api-Key for the MT5 indicator
+    verify_code_hash  VARCHAR(64)  DEFAULT NULL,   -- pending email confirmation code (hashed)
+    verify_expires_at DATETIME     DEFAULT NULL,
+    verify_attempts   INT          NOT NULL DEFAULT 0,
+    verify_sent_at    DATETIME     DEFAULT NULL,
+    last_login_at     DATETIME     DEFAULT NULL,
+    created_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_users_email (email),
+    UNIQUE KEY uq_users_username (username),
+    UNIQUE KEY uq_users_google (google_sub),
+    UNIQUE KEY uq_users_api_key (api_key)
+) ENGINE = InnoDB;
+
+INSERT IGNORE INTO users (id, username, name, email_verified, is_admin) VALUES (1, 'admin', 'Admin', 1, 1);
+
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_trades_user ON trades (user_id);
+UPDATE trades SET user_id = 1 WHERE user_id IS NULL;
+
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_strategies_user ON strategies (user_id);
+UPDATE strategies SET user_id = 1 WHERE user_id IS NULL;
+
+ALTER TABLE mistakes ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_mistakes_user ON mistakes (user_id);
+UPDATE mistakes SET user_id = 1 WHERE user_id IS NULL;
+
+ALTER TABLE backtests ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_backtests_user ON backtests (user_id);
+UPDATE backtests SET user_id = 1 WHERE user_id IS NULL;
+
+ALTER TABLE account_visibility ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_account_visibility_user ON account_visibility (user_id);
+UPDATE account_visibility SET user_id = 1 WHERE user_id IS NULL;
+
+-- Strategy / mistake names are unique per user instead of globally
+CREATE UNIQUE INDEX IF NOT EXISTS uq_strategy_user_name ON strategies (user_id, name);
+DROP INDEX IF EXISTS uq_strategy_name ON strategies;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mistake_user_name ON mistakes (user_id, name);
+DROP INDEX IF EXISTS uq_mistake_name ON mistakes;
+
+-- GRANT SELECT, INSERT, UPDATE ON hx_trades.users TO 'hx'@'localhost';
+-- FLUSH PRIVILEGES;

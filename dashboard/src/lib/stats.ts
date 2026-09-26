@@ -219,6 +219,28 @@ function groupKey(t: TradeRecord, dim: GroupDimension): { key: string; label: st
   }
 }
 
+/** Every dimension the Breakdown page (and its drill-down on /trades) accepts. */
+export const BREAKDOWN_DIMENSIONS: GroupDimension[] = [
+  "strategy",
+  "symbol",
+  "month",
+  "monthOfYear",
+  "week",
+  "weekday",
+  "hour",
+  "direction",
+  "mistake",
+];
+
+/**
+ * The group a trade falls in for an ordered list of dimensions - identical
+ * to `BreakdownGroup.key` from `computeBreakdown`, so a clicked breakdown
+ * row can be matched back to its trades.
+ */
+export function comboKey(t: TradeRecord, dims: GroupDimension[]): string {
+  return dims.map((d) => groupKey(t, d).key).join(" ");
+}
+
 const TIME_LIKE: GroupDimension[] = ["month", "monthOfYear", "week", "hour"];
 
 /** Chronological/cyclic dims compare by key; entity-like dims compare by label. */

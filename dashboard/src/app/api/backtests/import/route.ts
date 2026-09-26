@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { accountOwnedByOther, query } from "@/lib/db";
+import { errorResponse, requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ function mtTime(value: unknown): string | null {
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireUser(req);
     const body = await req.json();
     const batchId = String(body?.batch_id || "").trim();
     const account = Number(body?.account);
@@ -18,10 +20,13 @@ export async function POST(req: NextRequest) {
     if (!batchId || !Number.isFinite(account) || !symbol || !trades)
       return NextResponse.json({ error: "expected { batch_id, account, symbol, trades[] }" }, { status: 400 });
 
+    if (await accountOwnedByOther(account, user.id))
+      return NextResponse.json({ error: `MT5 account ${account} belongs to another user` }, { status: 403 });
+
     // Store the uploaded run once. Do not touch strategy_id on re-upload,
     // because that assignment belongs to the dashboard user.
-    await query(`INSERT INTO backtests (batch_id, account, symbol) VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE symbol = VALUES(symbol)`, [batchId, account, symbol]);
+    await query(`INSERT INTO backtests (batch_id, account, symbol, user_id) VALUES (?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE symbol = VALUES(symbol)`, [batchId, account, symbol, user.id]);
     const headers = await query<{ id: number }>(
       "SELECT id FROM backtests WHERE batch_id = ? AND account = ?", [batchId, account]);
     const backtestId = Number(headers[0]?.id);
@@ -43,6 +48,6 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ saved, batchId });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "backtest import failed" }, { status: 500 });
+    return errorResponse(e, "backtest import failed");
   }
 }

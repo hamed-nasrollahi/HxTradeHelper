@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadSettings, saveSettings } from "@/lib/settings";
+import { errorResponse, requireAdmin } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+/** Server-wide database settings: admins only. */
+export async function GET(req: NextRequest) {
+  try {
+    await requireAdmin(req);
+  } catch (e) {
+    return errorResponse(e, "forbidden");
+  }
   const s = loadSettings();
   // Never send secrets back to the browser
   return NextResponse.json({
@@ -17,6 +24,11 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  try {
+    await requireAdmin(req);
+  } catch (e) {
+    return errorResponse(e, "forbidden");
+  }
   const body = await req.json();
   const current = loadSettings();
   const next = {

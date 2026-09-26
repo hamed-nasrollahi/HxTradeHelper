@@ -13,11 +13,13 @@ Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 | Page | What it does |
 |------|--------------|
 | **Overview** | KPI tiles + equity curve + monthly P/L. Metrics: net profit, win rate, profit factor, expectancy, avg win/loss, payoff ratio, avg planned R:R, biggest win/loss (with symbol and date), max drawdown, win/loss streaks, trades per day |
-| **Breakdown** | Group the same filtered stats by strategy, month, month of year (seasonality across years), ISO week, symbol, day of week, hour of day, direction, or mistake tag — chart plus full table; optionally add a second "then by" dimension for a combined breakdown (e.g. strategy, then hour of day), and optionally exclude trades with entry or exit marked wrong |
+| **Breakdown** | Group the same filtered stats by strategy, month, month of year (seasonality across years), ISO week, symbol, day of week, hour of day, direction, or mistake tag — chart plus full table; optionally add a second "then by" dimension for a combined breakdown (e.g. strategy, then hour of day), and optionally exclude trades with entry or exit marked wrong. Click a row's trade count to open those exact trades on the Trades page |
 | **Trades** | Filterable trade list; assign a strategy to each trade inline, and review entry/exit correctness with a mistake tag |
 | **Strategies** | Create/edit/delete strategies (name, description, color) with per-strategy quick stats |
 | **Mistakes** | Create/edit/delete recurring-mistake tags (name, description) with a count of tagged trades |
-| **Settings** | MariaDB host/port/database/username/password with a test-connection button, plus the journal import API key |
+| **Settings** | Your account: personal import API key (create / show / copy / regenerate / delete) and password. Admins also get the MariaDB connection with a test-connection button and the legacy global import key |
+| **Admin** *(admins)* | User counts, new users per month for the last 6 months, top 10 gainers and losers by net P/L (30 days / 90 days / 1 year / all time) |
+| **Users** *(admins)* | Search users; confirm an account manually, disable / enable, reset a password (optionally emailed via Brevo), grant / remove admin |
 
 Every page shares the same filter row (date range, symbol, strategy,
 direction), so any statistic can be combined — e.g. "win rate of the
@@ -63,6 +65,37 @@ the `latest` tag to that same image. Publishing is manual through the
 **Publish dashboard Docker image** GitHub Action; enter the version you
 want to publish, matching `dashboard/package.json`.
 
+## Users and sign-in
+
+The dashboard is multi-user; every user sees only their own trades,
+accounts, strategies, mistakes and backtests.
+
+- **Main admin (user #1)** signs in with `DASHBOARD_USER` /
+  `DASHBOARD_PASSWORD` exactly as before, and owns every record that existed
+  before multi-user support. Sessions from before the upgrade stay valid.
+- **Email sign-up** at `/register`: name, email, password → a 6-digit code
+  is emailed through [Brevo](https://www.brevo.com) (`BREVO_API_KEY`,
+  `MAIL_FROM_EMAIL` — a verified Brevo sender). Codes expire after 15
+  minutes, allow 5 attempts, and can be re-sent once a minute. Without
+  Brevo configured the code is only printed in the server log; an admin can
+  confirm the account on the **Users** page instead.
+- **Forgot password** at `/forgot-password` (linked from the login page):
+  a 6-digit reset code is emailed via Brevo (same expiry/attempt limits);
+  entering it with a new password signs the user in. An admin can also
+  reset a password on the **Users** page. The main admin's password is
+  `DASHBOARD_PASSWORD` in `.env`.
+- **Google sign-in**: set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
+  `APP_URL`, and add `${APP_URL}/api/auth/google/callback` as an authorised
+  redirect URI of the OAuth client. A Google login with the same email as
+  an existing account signs into (and links) that account.
+- **MT5 accounts** belong to the user who first uploads them; uploads of an
+  account owned by someone else are rejected with 403.
+- **Upgrading** needs no manual step when the dashboard's DB user may
+  `CREATE`/`ALTER` — the schema upgrade runs on first start. It only adds
+  the `users` table and `user_id` columns (existing rows get `user_id = 1`);
+  nothing is deleted. Otherwise apply `sql/dashboard.sql` by hand. Taking a
+  backup first (`mysqldump hx_trades > backup.sql`) never hurts.
+
 ## Journal import endpoint
 
 The MT5 indicator uploads through `HxTradeUploader.dll` to:
@@ -70,7 +103,7 @@ The MT5 indicator uploads through `HxTradeUploader.dll` to:
 ```
 POST /api/import
 Content-Type: application/json
-X-Api-Key: <Import API key from Settings, if set>
+X-Api-Key: <your personal API key from Settings>
 
 { "account": 1234567, "trades": [ { "position_id": ..., "symbol": "...",
   "type": "Buy", "result": "Win", "rr": "1:2.50", "entry_price": ...,
@@ -79,8 +112,12 @@ X-Api-Key: <Import API key from Settings, if set>
 ```
 
 Set the indicator's `ApiUrl` input to
-`http://<dashboard-host>:3000/api/import` (and `ApiKey` to the import key
-if you configured one). Trades are upserted by `(account, position_id)`,
+`http://<dashboard-host>:3000/api/import` and `ApiKey` to your personal
+key — create it with **Create API key** on the Settings page (you can
+regenerate or delete it there later) — the trades are saved to your account. The
+legacy global key (`HX_API_KEY` / admin Settings) keeps working and saves
+to the main admin. Uploads without a valid key are always rejected with
+401. Trades are upserted by `(account, position_id)`,
 so re-exporting the same day is safe: open trades update once they close,
 and strategy assignments made in the dashboard are never overwritten by a
 re-import.
@@ -127,9 +164,13 @@ initial defaults only:
 | `HX_DB_NAME` | `hx_trades` |
 | `HX_DB_USER` | `hx` |
 | `HX_DB_PASSWORD` | *(empty)* |
-| `HX_API_KEY` | *(empty)* — initial journal import key |
-| `DASHBOARD_USER` | `admin` — Basic Auth login |
-| `DASHBOARD_PASSWORD` | `admin` — Basic Auth password |
+| `HX_API_KEY` | *(empty)* — legacy global import key (uploads go to the main admin) |
+| `DASHBOARD_USER` | `admin` — main admin login |
+| `DASHBOARD_PASSWORD` | `admin` — main admin password |
+| `SESSION_SECRET` | *(derived from the admin login)* — signs session cookies; set a long random value |
+| `APP_URL` | *(empty)* — public base URL, needed for Google sign-in |
+| `BREVO_API_KEY` / `MAIL_FROM_EMAIL` / `MAIL_FROM_NAME` | *(empty)* — Brevo transactional email for confirmation codes |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | *(empty)* — enables "Continue with Google" |
 | `DATA_DIR` | `/app/data` (where settings.json lives) |
 | `NEWS_FEED_URL` | `https://nfs.faireconomy.media/ff_calendar_thisweek.json` — ForexFactory feed `/api/news` fetches from |
 
@@ -152,7 +193,7 @@ Point the Settings page (or `HX_DB_*` env vars) at any MariaDB with the
 | Script | Purpose |
 |--------|---------|
 | `sql/db-init.sql` | Base `trades` table — only for a brand-new database |
-| `sql/dashboard.sql` | Dashboard additions: `strategies` table, `trades.strategy_id` FK, `mistakes` table, `trades.entry_correct`/`exit_correct`/`mistake_id` review columns, `news_events`/`news_fetch_log` tables, indexes. Idempotent — safe to re-run on an existing database |
+| `sql/dashboard.sql` | Dashboard additions: `strategies` table, `trades.strategy_id` FK, `mistakes` table, `trades.entry_correct`/`exit_correct`/`mistake_id` review columns, `news_events`/`news_fetch_log` tables, `users` table and per-user `user_id` columns, indexes. Idempotent — safe to re-run on an existing database |
 
 ## How the statistics are defined
 
@@ -170,14 +211,15 @@ Point the Settings page (or `HX_DB_*` env vars) at any MariaDB with the
 
 ## Security note
 
-Every page and API route requires signing in at `/login` with
-`DASHBOARD_USER` / `DASHBOARD_PASSWORD` (session cookie, enforced by
-`src/middleware.ts`) — change the default `admin`/`admin` before exposing
-the dashboard; changing them also invalidates existing sessions. The only
-exception is `POST /api/import`, which the MT5 uploader authenticates
-with its own `X-Api-Key`, and `GET /api/news`, which serves only the
-public ForexFactory calendar and needs no credentials. The login form
-sends credentials in cleartext,
-so put the dashboard behind HTTPS (reverse proxy) when it is reachable
-from the internet. The Settings page writes DB credentials to the
-server-side data volume only.
+Every page and API route requires a signed-in user (session cookie signed
+with `SESSION_SECRET`, verified by `src/middleware.ts`; every API route
+then scopes its queries to that user and rejects disabled accounts) or a
+valid `X-Api-Key`. Change the default `admin`/`admin` before exposing the
+dashboard. The indicator endpoints (`POST /api/import`,
+`POST /api/backtests/import`, `GET /api/news`) authenticate with
+`X-Api-Key`; uploads without a valid key are rejected, while `/api/news`
+stays open as long as no global import key is set. Passwords are stored as scrypt hashes and confirmation codes as
+SHA-256 hashes. Login forms send credentials in cleartext, so put the
+dashboard behind HTTPS (reverse proxy) when it is reachable from the
+internet. The Settings page writes DB credentials to the server-side data
+volume only.

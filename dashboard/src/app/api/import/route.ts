@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { accountOwnedByOther, query } from "@/lib/db";
+import { errorResponse, requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,8 @@ function mtTime(v: unknown): string | null {
 const UPSERT = `
 INSERT INTO trades (account, position_id, symbol, type, result, rr,
                     entry_price, stop_loss, take_profit, close_price,
-                    profit, open_time, close_time, is_open)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    profit, open_time, close_time, is_open, user_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     symbol = VALUES(symbol),
     type = VALUES(type),
@@ -36,16 +37,23 @@ ON DUPLICATE KEY UPDATE
 /**
  * Receives the journal payload the MT5 indicator uploads through
  * HxTradeUploader.dll and upserts it keyed by (account, position_id).
- * Authenticated by src/middleware.ts (X-Api-Key, since the indicator has
- * no session cookie).
+ * Authenticated by the X-Api-Key header (the uploading user's personal key,
+ * or the legacy global key = admin), since the indicator has no session
+ * cookie. Trades are stored under that user; an MT5 account already owned
+ * by another user is refused.
  */
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireUser(req);
     const payload = await req.json().catch(() => null);
     const account = Number(payload?.account);
     const trades = Array.isArray(payload?.trades) ? payload.trades : null;
     if (!Number.isFinite(account) || !trades) {
       return NextResponse.json({ error: "expected { account, trades[] }" }, { status: 400 });
+    }
+
+    if (await accountOwnedByOther(account, user.id)) {
+      return NextResponse.json({ error: `MT5 account ${account} belongs to another user` }, { status: 403 });
     }
 
     // Full-history exports set skip_existing so closed trades already in the
@@ -88,11 +96,12 @@ export async function POST(req: NextRequest) {
         openTime,
         mtTime(t.close_time),
         t.is_open ? 1 : 0,
+        user.id,
       ]);
       saved++;
     }
     return NextResponse.json(skipExisting ? { saved, skipped } : { saved });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "import failed" }, { status: 500 });
+    return errorResponse(e, "import failed");
   }
 }

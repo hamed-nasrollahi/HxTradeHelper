@@ -1,15 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Filters from "@/components/Filters";
 import ErrorBanner from "@/components/ErrorBanner";
 import { useMeta } from "@/components/useMeta";
 import { filterQuery, fmtMoney, fmtNum, getJSON, profitColor, sendJSON } from "@/lib/client";
 import { TradeFilters, TradeRecord } from "@/lib/types";
 
-export default function TradesPage() {
+const FILTER_KEYS: (keyof TradeFilters)[] = ["from", "to", "account", "symbol", "strategyId", "direction"];
+
+/** A Breakdown row opened from the Breakdown page (?groupBy=...&group=...). */
+interface BreakdownGroupFilter {
+  groupBy: string;
+  group: string;
+  label: string;
+  excludeMistakes: boolean;
+}
+
+function TradesView() {
   const { meta } = useMeta();
-  const [filters, setFilters] = useState<TradeFilters>({});
+  const router = useRouter();
+  const params = useSearchParams();
+  const [filters, setFilters] = useState<TradeFilters>(() => {
+    const f: TradeFilters = {};
+    for (const k of FILTER_KEYS) {
+      const v = params.get(k);
+      if (v) f[k] = v;
+    }
+    return f;
+  });
+  const [breakdownGroup, setBreakdownGroup] = useState<BreakdownGroupFilter | null>(() =>
+    params.get("groupBy") && params.get("group") !== null
+      ? {
+          groupBy: params.get("groupBy")!,
+          group: params.get("group")!,
+          label: params.get("groupLabel") || params.get("group")!,
+          excludeMistakes: params.get("excludeMistakes") === "1",
+        }
+      : null
+  );
   const [includeOpen, setIncludeOpen] = useState(true);
   const [trades, setTrades] = useState<TradeRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -18,9 +48,16 @@ export default function TradesPage() {
 
   const load = () => {
     setRefreshing(true);
-    getJSON<{ trades: TradeRecord[] }>(
-      `/api/trades${filterQuery(filters, includeOpen ? { includeOpen: "1" } : {})}`
-    )
+    const extra: Record<string, string> = breakdownGroup
+      ? {
+          groupBy: breakdownGroup.groupBy,
+          group: breakdownGroup.group,
+          ...(breakdownGroup.excludeMistakes ? { excludeMistakes: "1" } : {}),
+        }
+      : includeOpen
+        ? { includeOpen: "1" }
+        : {};
+    getJSON<{ trades: TradeRecord[] }>(`/api/trades${filterQuery(filters, extra)}`)
       .then((r) => {
         setTrades(r.trades);
         setError(null);
@@ -30,7 +67,12 @@ export default function TradesPage() {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [filters, includeOpen]);
+  useEffect(load, [filters, includeOpen, breakdownGroup]);
+
+  const clearBreakdownGroup = () => {
+    setBreakdownGroup(null);
+    router.replace(`/trades${filterQuery(filters)}`);
+  };
 
   const assign = async (trade: TradeRecord, strategyId: string) => {
     setSaving(trade.id);
@@ -114,10 +156,28 @@ export default function TradesPage() {
       </div>
       {error ? <ErrorBanner message={error} /> : null}
       <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} accounts={meta.accounts} strategies={meta.strategies} />
-      <label className="mb-3 flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
-        <input type="checkbox" checked={includeOpen} onChange={(e) => setIncludeOpen(e.target.checked)} />
-        Include open positions
-      </label>
+      {breakdownGroup ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
+          <span
+            className="flex items-center gap-2 rounded-md px-2 py-1"
+            style={{ border: "1px solid var(--border)", background: "var(--surface-1)" }}
+          >
+            Breakdown group: <strong style={{ color: "var(--ink-1)" }}>{breakdownGroup.label}</strong>
+            {breakdownGroup.excludeMistakes ? <span style={{ color: "var(--ink-muted)" }}>(mistakes excluded)</span> : null}
+            <button aria-label="clear breakdown group" onClick={clearBreakdownGroup}>
+              ×
+            </button>
+          </span>
+          <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
+            {trades.length} closed trade{trades.length === 1 ? "" : "s"}
+          </span>
+        </div>
+      ) : (
+        <label className="mb-3 flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
+          <input type="checkbox" checked={includeOpen} onChange={(e) => setIncludeOpen(e.target.checked)} />
+          Include open positions
+        </label>
+      )}
 
       <div className="card overflow-x-auto">
         <table className="w-max min-w-full text-sm">
@@ -238,5 +298,13 @@ export default function TradesPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+export default function TradesPage() {
+  return (
+    <Suspense>
+      <TradesView />
+    </Suspense>
   );
 }
