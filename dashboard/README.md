@@ -14,7 +14,7 @@ Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 |------|--------------|
 | **Overview** | KPI tiles + equity curve + monthly P/L. Metrics: net profit, win rate, profit factor, expectancy, avg win/loss, payoff ratio, avg planned R:R, biggest win/loss (with symbol and date), max drawdown, win/loss streaks, trades per day |
 | **Breakdown** | Group the same filtered stats by strategy, month, month of year (seasonality across years), ISO week, symbol, day of week, hour of day, direction, or mistake tag — chart plus full table; optionally add a second "then by" dimension for a combined breakdown (e.g. strategy, then hour of day), and optionally exclude trades with entry or exit marked wrong. Click a row's trade count to open those exact trades on the Trades page |
-| **Trades** | Filterable trade list; assign a strategy to each trade inline, and review entry/exit correctness with a mistake tag |
+| **Trades** | Filterable trade list with open and close time, planned R:R and realized R; assign a strategy to each trade inline, and review entry/exit correctness with a mistake tag |
 | **Strategies** | Create/edit/delete strategies (name, description, color) with per-strategy quick stats |
 | **Mistakes** | Create/edit/delete recurring-mistake tags (name, description) with a count of tagged trades |
 | **Settings** | Your account: personal import API key (create / show / copy / regenerate / delete) and password. Admins also get the MariaDB connection with a test-connection button and the legacy global import key |
@@ -208,6 +208,14 @@ Point the Settings page (or `HX_DB_*` env vars) at any MariaDB with the
 - **Max drawdown** is the largest peak-to-trough drop of the cumulative
   P/L curve (money, not percent — the DB doesn't know your balance).
 - Profit numbers include swap and commission, as exported by the journal.
+- **R** (realized R multiple) = (close − entry) / |entry − SL|, negated for
+  Sells. The journal stores the SL a trade had when it closed, so trades
+  whose SL was removed or moved to entry have no R and are left out of the
+  R figures (the tiles say how many trades had one). **Net R** sums it and
+  **max drawdown** also shows the peak-to-trough of the cumulative R curve.
+- **Worst losing streak** is the longest run of consecutive losing trades
+  (break-evens don't end a run; ties go to the bigger money loss), shown
+  as the number of losses, money lost, R lost and its dates.
 
 ## Security note
 

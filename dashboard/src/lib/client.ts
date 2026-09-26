@@ -39,6 +39,13 @@ export function fmtNum(v: number | null | undefined, digits = 2): string {
   return Number(v).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: digits });
 }
 
+/** Signed R multiple, e.g. "+1.50R" / "-3.20R". */
+export function fmtR(v: number | null | undefined, digits = 2): string {
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return "-";
+  const n = Number(v);
+  return `${n > 0 ? "+" : ""}${n.toFixed(digits)}R`;
+}
+
 export function profitColor(v: number): string {
   if (v > 0) return "var(--good-text)";
   if (v < 0) return "var(--bad-text)";

@@ -8,7 +8,7 @@ import EquityChart from "@/components/charts/EquityChart";
 import PnlBarChart from "@/components/charts/PnlBarChart";
 import WinRateMonths from "@/components/charts/WinRateMonths";
 import { useMeta } from "@/components/useMeta";
-import { filterQuery, fmtMoney, fmtNum, getJSON, profitColor } from "@/lib/client";
+import { filterQuery, fmtMoney, fmtNum, fmtR, getJSON, profitColor } from "@/lib/client";
 import { recentMonthWinRates } from "@/lib/stats";
 import { BreakdownGroup, EquityPoint, Summary, TradeFilters } from "@/lib/types";
 
@@ -37,6 +37,7 @@ export default function OverviewPage() {
   }, [filters]);
 
   const s = summary;
+  const ls = s?.worstLossStreak ?? null;
   const monthlyWinRate = recentMonthWinRates(monthly, 6);
   const streak =
     s === null || s.currentStreak === 0
@@ -85,11 +86,44 @@ export default function OverviewPage() {
               valueColor="var(--bad-text)"
               sub={s.biggestLoss ? `${s.biggestLoss.symbol} · ${s.biggestLoss.date.slice(0, 10)}` : undefined}
             />
-            <KpiCard label="Max drawdown" value={fmtMoney(-s.maxDrawdown)} valueColor="var(--bad-text)" sub="peak-to-trough on equity" />
+            <KpiCard
+              label="Max drawdown"
+              value={fmtMoney(-s.maxDrawdown)}
+              valueColor="var(--bad-text)"
+              sub={`${s.maxDrawdownR === null ? "" : `${fmtR(-s.maxDrawdownR, 1)} · `}peak-to-trough on equity`}
+            />
             <KpiCard
               label="Streaks"
               value={streak}
               sub={`best ${s.longestWinStreak}W · worst ${s.longestLossStreak}L · ${fmtNum(s.avgTradesPerDay, 1)} trades/day`}
+            />
+            <KpiCard
+              label="Worst losing streak"
+              value={ls ? `${ls.count} loss${ls.count === 1 ? "" : "es"} in a row` : "-"}
+              valueColor={ls ? "var(--bad-text)" : undefined}
+              sub={
+                ls
+                  ? [
+                      fmtMoney(ls.profit),
+                      ls.rTrades > 0
+                        ? `${fmtR(ls.r, 1)}${ls.rTrades < ls.count ? ` (R from ${ls.rTrades} of ${ls.count})` : ""}`
+                        : "no R (no SL)",
+                      ls.from.slice(0, 10) === ls.to.slice(0, 10)
+                        ? ls.from.slice(0, 10)
+                        : `${ls.from.slice(0, 10)} → ${ls.to.slice(5, 10)}`,
+                    ].join(" · ")
+                  : undefined
+              }
+            />
+            <KpiCard
+              label="Net R"
+              value={s.rTrades > 0 ? fmtR(s.netR, 1) : "-"}
+              valueColor={s.rTrades > 0 ? profitColor(s.netR) : undefined}
+              sub={
+                s.rTrades > 0
+                  ? `avg ${fmtR(s.netR / s.rTrades)} · from ${s.rTrades} trade${s.rTrades === 1 ? "" : "s"} with SL`
+                  : "needs trades with a stop loss"
+              }
             />
           </div>
 
