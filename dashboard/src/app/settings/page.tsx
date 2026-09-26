@@ -233,16 +233,15 @@ function DatabaseSettings() {
         <h2 className="mb-1 mt-6 text-sm font-medium">Legacy global import key</h2>
         <p className="mb-4 text-xs" style={{ color: "var(--ink-muted)" }}>
           The key used before multi-user support. Uploads sent with it (in the <code>X-Api-Key</code> header)
-          are saved to the main admin account. While it is empty, the indicator endpoints accept uploads
-          without a key and save them to the admin - set one to close that. Each user&apos;s personal key
-          (above) always works.
+          are saved to the main admin account. Uploads without a valid key are always rejected. Each
+          user&apos;s personal key (above) always works.
         </p>
         <div className="flex flex-col gap-3">
           {field(
             "Import API key",
             "importApiKey",
             "password",
-            hasImportKey ? "•••••• (leave empty to keep current)" : "empty = no key required for the admin"
+            hasImportKey ? "•••••• (leave empty to keep current)" : "empty = no global key (personal keys only)"
           )}
         </div>
         <div className="mt-4 flex gap-2">

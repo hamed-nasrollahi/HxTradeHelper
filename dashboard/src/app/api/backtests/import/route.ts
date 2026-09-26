@@ -11,7 +11,7 @@ function mtTime(value: unknown): string | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireUser(req, { headless: true });
+    const user = await requireUser(req);
     const body = await req.json();
     const batchId = String(body?.batch_id || "").trim();
     const account = Number(body?.account);

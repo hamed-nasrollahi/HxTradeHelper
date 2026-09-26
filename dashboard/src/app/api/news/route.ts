@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireUser(req, { headless: true });
+    await requireUser(req, { openWithoutGlobalKey: true });
     const currencies = (req.nextUrl.searchParams.get("currencies") || "")
       .split(",")
       .map((c) => c.trim().toUpperCase())

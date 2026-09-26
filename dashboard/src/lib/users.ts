@@ -1,5 +1,5 @@
 import { query } from "./db";
-import { sendMail, verificationMail } from "./mail";
+import { resetCodeMail, sendMail, verificationMail } from "./mail";
 import { randomCode, randomToken, sha256 } from "./password";
 import { HttpError, UserRow } from "./session";
 
@@ -25,11 +25,26 @@ export async function ensureApiKey(userId: number): Promise<void> {
 }
 
 /**
- * Generates a fresh confirmation code for an unverified user and emails it.
+ * "verify" = confirm a new sign-up, "reset" = forgot password. Both share
+ * the verify_* columns; the purpose is mixed into the hash so a code only
+ * works for what it was sent for.
+ */
+export type CodePurpose = "verify" | "reset";
+
+function codeHash(userId: number, purpose: CodePurpose, code: string): string {
+  // Sign-up codes keep the original "<id>:<code>" format
+  return sha256(purpose === "verify" ? `${userId}:${code}` : `${userId}:${purpose}:${code}`);
+}
+
+/**
+ * Generates a fresh 6-digit code for the user and emails it.
  * Returns whether the email actually went out (false = Brevo not
  * configured; the code is only logged on the server).
  */
-export async function sendVerificationCode(user: UserRow, { enforceCooldown }: { enforceCooldown: boolean }): Promise<boolean> {
+export async function sendVerificationCode(
+  user: UserRow,
+  { enforceCooldown, purpose = "verify" }: { enforceCooldown: boolean; purpose?: CodePurpose }
+): Promise<boolean> {
   if (!user.email) throw new HttpError(400, "This account has no email address");
   if (enforceCooldown && user.verify_sent_at) {
     const sentAt = Date.parse(`${user.verify_sent_at.replace(" ", "T")}Z`);
@@ -41,14 +56,14 @@ export async function sendVerificationCode(user: UserRow, { enforceCooldown }: {
     `UPDATE users SET verify_code_hash = ?, verify_attempts = 0, verify_sent_at = UTC_TIMESTAMP(),
             verify_expires_at = UTC_TIMESTAMP() + INTERVAL ${CODE_TTL_MINUTES} MINUTE
      WHERE id = ?`,
-    [sha256(`${user.id}:${code}`), user.id]
+    [codeHash(user.id, purpose, code), user.id]
   );
-  return sendMail(verificationMail(user.email, user.name, code, CODE_TTL_MINUTES));
+  const mail = purpose === "reset" ? resetCodeMail : verificationMail;
+  return sendMail(mail(user.email, user.name, code, CODE_TTL_MINUTES));
 }
 
-/** Checks a confirmation code; on success marks the email verified. */
-export async function confirmCode(user: UserRow, code: string): Promise<void> {
-  if (Number(user.email_verified)) return;
+/** Checks a 6-digit code; throws on a wrong/expired one. */
+export async function checkCode(user: UserRow, code: string, purpose: CodePurpose): Promise<void> {
   if (!user.verify_code_hash || !user.verify_expires_at) {
     throw new HttpError(400, "No confirmation code pending - request a new one");
   }
@@ -58,10 +73,16 @@ export async function confirmCode(user: UserRow, code: string): Promise<void> {
   if (Date.parse(`${user.verify_expires_at.replace(" ", "T")}Z`) < Date.now()) {
     throw new HttpError(400, "The code has expired - request a new one");
   }
-  if (sha256(`${user.id}:${code.trim()}`) !== user.verify_code_hash) {
+  if (codeHash(user.id, purpose, code.trim()) !== user.verify_code_hash) {
     await query("UPDATE users SET verify_attempts = verify_attempts + 1 WHERE id = ?", [user.id]);
     throw new HttpError(400, "Wrong code");
   }
+}
+
+/** Checks a sign-up confirmation code; on success marks the email verified. */
+export async function confirmCode(user: UserRow, code: string): Promise<void> {
+  if (Number(user.email_verified)) return;
+  await checkCode(user, code, "verify");
   await markVerified(user.id);
 }
 

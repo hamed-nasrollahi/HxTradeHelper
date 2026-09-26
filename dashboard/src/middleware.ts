@@ -13,13 +13,13 @@ import { SESSION_COOKIE, USER_HEADER, verifySessionToken } from "@/lib/auth";
  * the legacy global import key = admin); that key is checked in the route,
  * since the edge runtime can't reach the database. /api/import,
  * /api/backtests/import and /api/news are called by the MT5 indicator and
- * are always passed through - the route decides (open while no global key
- * is configured, matching the pre-multi-user behavior).
+ * are always passed through - the route decides (uploads always need a
+ * valid key; /api/news is open while no global key is configured).
  */
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
-  const authPage = pathname === "/login" || pathname === "/register";
+  const authPage = pathname === "/login" || pathname === "/register" || pathname === "/forgot-password";
   const alwaysOpen =
     authPage || pathname === "/api/login" || pathname === "/api/logout" || pathname.startsWith("/api/auth/");
   const headless = pathname === "/api/import" || pathname === "/api/backtests/import" || pathname === "/api/news";

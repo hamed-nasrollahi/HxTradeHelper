@@ -44,7 +44,7 @@ ON DUPLICATE KEY UPDATE
  */
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireUser(req, { headless: true });
+    const user = await requireUser(req);
     const payload = await req.json().catch(() => null);
     const account = Number(payload?.account);
     const trades = Array.isArray(payload?.trades) ? payload.trades : null;

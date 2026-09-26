@@ -59,7 +59,16 @@ function LoginForm() {
             autoComplete="current-password"
           />
         </div>
-        <button className="btn mt-5 w-full" type="submit" disabled={busy}>
+        <div className="mt-2 text-right text-xs">
+          <Link
+            href={`/forgot-password${user.includes("@") ? `?email=${encodeURIComponent(user)}` : ""}`}
+            className="underline"
+            style={{ color: "var(--ink-2)" }}
+          >
+            Forgot password?
+          </Link>
+        </div>
+        <button className="btn mt-4 w-full" type="submit" disabled={busy}>
           {busy ? "Signing in..." : "Sign in"}
         </button>
       </form>

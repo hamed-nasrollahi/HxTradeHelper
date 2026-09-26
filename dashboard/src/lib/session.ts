@@ -60,18 +60,18 @@ function active(u: UserRow | null): SessionUser {
 
 interface Options {
   /**
-   * Routes the MT5 indicator calls (/api/import, /api/backtests/import,
-   * /api/news). Before multi-user support these were open whenever no
-   * import API key was configured; that still holds, and such anonymous
-   * calls are attributed to the admin (user #1) who owns the old data.
+   * /api/news only: public calendar data, so it stays open while no global
+   * import key is configured (as before multi-user support). Uploads
+   * (/api/import, /api/backtests/import) never use this - they always
+   * need a session or a valid API key.
    */
-  headless?: boolean;
+  openWithoutGlobalKey?: boolean;
 }
 
 /**
  * The calling user, from (in order): the session cookie verified by the
  * middleware, a personal API key, the legacy global import key (= admin),
- * or - headless routes only, while no global key is set - the admin.
+ * or - openWithoutGlobalKey routes only, while no global key is set - the admin.
  * Disabled users are rejected on every request.
  */
 export async function requireUser(req: NextRequest, opts: Options = {}): Promise<SessionUser> {
@@ -85,7 +85,7 @@ export async function requireUser(req: NextRequest, opts: Options = {}): Promise
   }
   const globalKey = loadSettings().importApiKey;
   if (apiKey && globalKey && apiKey === globalKey) return active(await findUser(ADMIN_USER_ID));
-  if (opts.headless && !globalKey) return active(await findUser(ADMIN_USER_ID));
+  if (opts.openWithoutGlobalKey && !globalKey) return active(await findUser(ADMIN_USER_ID));
 
   throw new HttpError(401, apiKey ? "invalid api key" : "Not signed in");
 }

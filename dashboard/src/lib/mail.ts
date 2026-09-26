@@ -68,6 +68,22 @@ export function verificationMail(to: string, name: string | null, code: string, 
   };
 }
 
+export function resetCodeMail(to: string, name: string | null, code: string, minutes: number): Mail {
+  const hello = name ? `Hi ${name},` : "Hi,";
+  return {
+    to,
+    toName: name,
+    subject: `Your HxTradeHelper password reset code: ${code}`,
+    text: `${hello}\n\nYour HxTradeHelper password reset code is ${code}\n\nIt expires in ${minutes} minutes. If you didn't ask to reset your password, you can ignore this email - your password stays the same.`,
+    html: `<div style="font-family:system-ui,sans-serif;font-size:15px;color:#222">
+<p>${escapeHtml(hello)}</p>
+<p>Your HxTradeHelper password reset code is</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p>
+<p style="color:#666">It expires in ${minutes} minutes. If you didn't ask to reset your password, you can ignore this email - your password stays the same.</p>
+</div>`,
+  };
+}
+
 export function passwordResetMail(to: string, name: string | null, password: string): Mail {
   const hello = name ? `Hi ${name},` : "Hi,";
   return {

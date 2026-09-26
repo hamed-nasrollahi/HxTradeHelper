@@ -24,7 +24,7 @@ const ADMIN_LINKS = [
 
 export default function Nav() {
   const pathname = usePathname();
-  const authPage = pathname === "/login" || pathname === "/register";
+  const authPage = pathname === "/login" || pathname === "/register" || pathname === "/forgot-password";
   const [me, setMe] = useState<Me | null>(null);
 
   useEffect(() => {

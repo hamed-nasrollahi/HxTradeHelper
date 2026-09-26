@@ -79,6 +79,11 @@ accounts, strategies, mistakes and backtests.
   minutes, allow 5 attempts, and can be re-sent once a minute. Without
   Brevo configured the code is only printed in the server log; an admin can
   confirm the account on the **Users** page instead.
+- **Forgot password** at `/forgot-password` (linked from the login page):
+  a 6-digit reset code is emailed via Brevo (same expiry/attempt limits);
+  entering it with a new password signs the user in. An admin can also
+  reset a password on the **Users** page. The main admin's password is
+  `DASHBOARD_PASSWORD` in `.env`.
 - **Google sign-in**: set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
   `APP_URL`, and add `${APP_URL}/api/auth/google/callback` as an authorised
   redirect URI of the OAuth client. A Google login with the same email as
@@ -110,9 +115,8 @@ Set the indicator's `ApiUrl` input to
 `http://<dashboard-host>:3000/api/import` and `ApiKey` to your personal
 key from the Settings page — the trades are saved to your account. The
 legacy global key (`HX_API_KEY` / admin Settings) keeps working and saves
-to the main admin; while it is empty, uploads without a key are accepted
-and also saved to the admin, so set one once other people use the
-dashboard. Trades are upserted by `(account, position_id)`,
+to the main admin. Uploads without a valid key are always rejected with
+401. Trades are upserted by `(account, position_id)`,
 so re-exporting the same day is safe: open trades update once they close,
 and strategy assignments made in the dashboard are never overwritten by a
 re-import.
@@ -212,9 +216,8 @@ then scopes its queries to that user and rejects disabled accounts) or a
 valid `X-Api-Key`. Change the default `admin`/`admin` before exposing the
 dashboard. The indicator endpoints (`POST /api/import`,
 `POST /api/backtests/import`, `GET /api/news`) authenticate with
-`X-Api-Key`; they stay open while no global import key is set, attributing
-such uploads to the main admin — set a global key once other people have
-accounts. Passwords are stored as scrypt hashes and confirmation codes as
+`X-Api-Key`; uploads without a valid key are rejected, while `/api/news`
+stays open as long as no global import key is set. Passwords are stored as scrypt hashes and confirmation codes as
 SHA-256 hashes. Login forms send credentials in cleartext, so put the
 dashboard behind HTTPS (reverse proxy) when it is reachable from the
 internet. The Settings page writes DB credentials to the server-side data
