@@ -69,6 +69,15 @@ export interface TradeExtreme {
   date: string;
 }
 
+export interface LossStreak {
+  count: number; // consecutive losing trades
+  profit: number; // money lost over the streak (negative)
+  r: number; // R lost over the streak, from the trades that have an R
+  rTrades: number; // how many of the streak's trades have an R
+  from: string; // first trade's close time
+  to: string; // last trade's close time
+}
+
 export interface Summary {
   totalTrades: number;
   wins: number;
@@ -89,6 +98,10 @@ export interface Summary {
   maxDrawdown: number; // positive money amount
   longestWinStreak: number;
   longestLossStreak: number;
+  worstLossStreak: LossStreak | null; // longest run of losses (ties: bigger loss)
+  netR: number; // sum of R over trades with an R
+  rTrades: number; // trades with an R (SL set and not at entry)
+  maxDrawdownR: number | null; // peak-to-trough of the cumulative R curve
   currentStreak: number; // positive = wins, negative = losses
   activeDays: number;
   avgTradesPerDay: number;

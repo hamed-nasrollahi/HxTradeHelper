@@ -1,5 +1,6 @@
 import {
   BreakdownGroup,
+  LossStreak,
   EquityPoint,
   GroupDimension,
   MonthWinRate,
@@ -24,6 +25,23 @@ export function parseRR(rr: string | null): number | null {
   if (m) return Number(m[1]);
   const plain = Number(rr);
   return Number.isFinite(plain) && plain > 0 ? plain : null;
+}
+
+/**
+ * Realized R multiple from prices: (close - entry) / |entry - SL|, sign
+ * flipped for Sells. The journal stores the SL the trade had when it
+ * closed, so trades whose SL was removed or moved to entry have no R (null).
+ */
+export function tradeR(t: TradeRecord): number | null {
+  if (Number(t.is_open)) return null;
+  const entry = Number(t.entry_price);
+  const sl = Number(t.stop_loss);
+  const close = Number(t.close_price);
+  if (!sl || !close || !entry) return null;
+  const risk = Math.abs(entry - sl);
+  if (risk < 1e-12) return null;
+  const dir = t.type === "Sell" ? -1 : 1;
+  return (dir * (close - entry)) / risk;
 }
 
 function tradeTime(t: TradeRecord): string {
@@ -53,12 +71,21 @@ export function computeSummary(trades: TradeRecord[]): Summary {
 
   const days = new Set<string>();
 
+  // Worst losing streak: count, money, R and dates of each run of losses
+  let run: LossStreak | null = null;
+  let worstLossStreak: LossStreak | null = null;
+  let netR = 0;
+  let rTrades = 0;
+  let peakR = 0;
+  let maxDrawdownR = 0;
+
   for (const t of trades) {
     const profit = num(t.profit);
     netProfit += profit;
     days.add(tradeTime(t).slice(0, 10));
 
     if (profit > 0) {
+      run = null;
       wins++;
       grossProfit += profit;
       winStreak++;
@@ -67,6 +94,22 @@ export function computeSummary(trades: TradeRecord[]): Summary {
       if (!biggestWin || profit > biggestWin.profit)
         biggestWin = { profit, symbol: t.symbol, date: tradeTime(t) };
     } else if (profit < 0) {
+      const r = tradeR(t);
+      if (!run) run = { count: 0, profit: 0, r: 0, rTrades: 0, from: tradeTime(t), to: tradeTime(t) };
+      run.count++;
+      run.profit += profit;
+      run.to = tradeTime(t);
+      if (r !== null) {
+        run.r += r;
+        run.rTrades++;
+      }
+      if (
+        !worstLossStreak ||
+        run.count > worstLossStreak.count ||
+        (run.count === worstLossStreak.count && run.profit < worstLossStreak.profit)
+      ) {
+        worstLossStreak = { ...run };
+      }
       losses++;
       grossLoss += profit;
       lossStreak++;
@@ -81,6 +124,14 @@ export function computeSummary(trades: TradeRecord[]): Summary {
     equity += profit;
     peak = Math.max(peak, equity);
     maxDrawdown = Math.max(maxDrawdown, peak - equity);
+
+    const r = tradeR(t);
+    if (r !== null) {
+      netR += r;
+      rTrades++;
+      peakR = Math.max(peakR, netR);
+      maxDrawdownR = Math.max(maxDrawdownR, peakR - netR);
+    }
 
     const rr = parseRR(t.rr);
     if (rr !== null) {
@@ -114,6 +165,10 @@ export function computeSummary(trades: TradeRecord[]): Summary {
     maxDrawdown,
     longestWinStreak,
     longestLossStreak,
+    worstLossStreak,
+    netR,
+    rTrades,
+    maxDrawdownR: rTrades > 0 ? maxDrawdownR : null,
     currentStreak: winStreak > 0 ? winStreak : -lossStreak,
     activeDays: days.size,
     avgTradesPerDay: days.size > 0 ? total / days.size : 0,

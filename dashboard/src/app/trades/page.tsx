@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Filters from "@/components/Filters";
 import ErrorBanner from "@/components/ErrorBanner";
 import { useMeta } from "@/components/useMeta";
-import { filterQuery, fmtMoney, fmtNum, getJSON, profitColor, sendJSON } from "@/lib/client";
+import { filterQuery, fmtMoney, fmtNum, fmtR, getJSON, profitColor, sendJSON } from "@/lib/client";
+import { tradeR } from "@/lib/stats";
 import { TradeFilters, TradeRecord } from "@/lib/types";
 
 const FILTER_KEYS: (keyof TradeFilters)[] = ["from", "to", "account", "symbol", "strategyId", "direction"];
@@ -183,6 +184,7 @@ function TradesView() {
         <table className="w-max min-w-full text-sm">
           <thead>
             <tr className="whitespace-nowrap text-left text-xs" style={{ color: "var(--ink-muted)" }}>
+              <th className="px-2 py-2 font-medium">Opened</th>
               <th className="px-2 py-2 font-medium">Closed</th>
               <th className="px-2 py-2 font-medium">Symbol</th>
               <th className="px-2 py-2 font-medium">Type</th>
@@ -191,7 +193,8 @@ function TradesView() {
               <th className="px-2 py-2 text-right font-medium">SL</th>
               <th className="px-2 py-2 text-right font-medium">TP</th>
               <th className="px-2 py-2 text-right font-medium">Close</th>
-              <th className="px-2 py-2 text-right font-medium">R:R</th>
+              <th className="px-2 py-2 text-right font-medium" title="Planned R:R from SL/TP">R:R</th>
+              <th className="px-2 py-2 text-right font-medium" title="Realized R: (close - entry) / |entry - SL|">R</th>
               <th className="px-2 py-2 text-right font-medium">Profit</th>
               <th className="px-2 py-2 font-medium">Strategy</th>
               <th className="px-2 py-2 text-center font-medium leading-tight">
@@ -211,9 +214,20 @@ function TradesView() {
             {trades.map((t) => (
               <tr key={t.id} style={{ borderTop: "1px solid var(--border)" }}>
                 <td className="tnum whitespace-nowrap px-2 py-2 text-xs leading-tight" style={{ color: "var(--ink-2)" }}>
-                  {(t.close_time || t.open_time).slice(0, 10)}
+                  {t.open_time.slice(0, 10)}
                   <br />
-                  <span style={{ color: "var(--ink-muted)" }}>{(t.close_time || t.open_time).slice(11, 16)}</span>
+                  <span style={{ color: "var(--ink-muted)" }}>{t.open_time.slice(11, 16)}</span>
+                </td>
+                <td className="tnum whitespace-nowrap px-2 py-2 text-xs leading-tight" style={{ color: "var(--ink-2)" }}>
+                  {t.close_time ? (
+                    <>
+                      {t.close_time.slice(0, 10)}
+                      <br />
+                      <span style={{ color: "var(--ink-muted)" }}>{t.close_time.slice(11, 16)}</span>
+                    </>
+                  ) : (
+                    <span style={{ color: "var(--ink-muted)" }}>open</span>
+                  )}
                 </td>
                 <td className="px-2 py-2 font-medium">{t.symbol}</td>
                 <td className="px-2 py-2">{t.type}</td>
@@ -234,6 +248,9 @@ function TradesView() {
                 <td className="tnum px-2 py-2 text-right">{t.take_profit ? fmtNum(t.take_profit, 5) : "-"}</td>
                 <td className="tnum px-2 py-2 text-right">{t.close_price ? fmtNum(t.close_price, 5) : "-"}</td>
                 <td className="tnum px-2 py-2 text-right">{t.rr || "-"}</td>
+                <td className="tnum px-2 py-2 text-right" style={{ color: profitColor(tradeR(t) ?? 0) }}>
+                  {fmtR(tradeR(t))}
+                </td>
                 <td className="tnum px-2 py-2 text-right font-medium" style={{ color: profitColor(Number(t.profit)) }}>
                   {fmtMoney(Number(t.profit))}
                 </td>
@@ -289,7 +306,7 @@ function TradesView() {
             ))}
             {trades.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center" colSpan={14} style={{ color: "var(--ink-muted)" }}>
+                <td className="px-4 py-6 text-center" colSpan={16} style={{ color: "var(--ink-muted)" }}>
                   No trades in this range
                 </td>
               </tr>
