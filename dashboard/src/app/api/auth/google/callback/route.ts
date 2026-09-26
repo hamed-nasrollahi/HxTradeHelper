@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { GOOGLE_STATE_COOKIE, googleConfigured, googleProfile } from "@/lib/google";
 import { UserRow, findUserByEmail, startSession } from "@/lib/session";
-import { ensureApiKey, markVerified } from "@/lib/users";
+import { markVerified } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +59,6 @@ export async function GET(req: NextRequest) {
           profile.sub,
         ]);
         user = (await findUserByEmail(profile.email))!;
-        await ensureApiKey(user.id);
       }
     }
     if (Number(user.disabled)) return fail("Account disabled");

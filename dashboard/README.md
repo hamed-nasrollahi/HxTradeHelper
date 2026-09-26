@@ -17,7 +17,7 @@ Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 | **Trades** | Filterable trade list; assign a strategy to each trade inline, and review entry/exit correctness with a mistake tag |
 | **Strategies** | Create/edit/delete strategies (name, description, color) with per-strategy quick stats |
 | **Mistakes** | Create/edit/delete recurring-mistake tags (name, description) with a count of tagged trades |
-| **Settings** | Your account: personal import API key (show / copy / regenerate) and password. Admins also get the MariaDB connection with a test-connection button and the legacy global import key |
+| **Settings** | Your account: personal import API key (create / show / copy / regenerate / delete) and password. Admins also get the MariaDB connection with a test-connection button and the legacy global import key |
 | **Admin** *(admins)* | User counts, new users per month for the last 6 months, top 10 gainers and losers by net P/L (30 days / 90 days / 1 year / all time) |
 | **Users** *(admins)* | Search users; confirm an account manually, disable / enable, reset a password (optionally emailed via Brevo), grant / remove admin |
 
@@ -113,7 +113,8 @@ X-Api-Key: <your personal API key from Settings>
 
 Set the indicator's `ApiUrl` input to
 `http://<dashboard-host>:3000/api/import` and `ApiKey` to your personal
-key from the Settings page — the trades are saved to your account. The
+key — create it with **Create API key** on the Settings page (you can
+regenerate or delete it there later) — the trades are saved to your account. The
 legacy global key (`HX_API_KEY` / admin Settings) keeps working and saves
 to the main admin. Uploads without a valid key are always rejected with
 401. Trades are upserted by `(account, position_id)`,

@@ -47,6 +47,11 @@ function AccountCard({ me, setMe }: { me: Me; setMe: (m: Me) => void }) {
     }
   };
 
+  const revoke = () => {
+    if (confirm("Delete your API key? Uploads using it will be rejected until you create a new one."))
+      act({ action: "revokeKey" }, "API key deleted.");
+  };
+
   const regenerate = () => {
     if (confirm("Generate a new API key? The old key stops working immediately - update the indicator's ApiKey input."))
       act({ action: "regenerateKey" }, "New API key generated.");
@@ -67,23 +72,32 @@ function AccountCard({ me, setMe }: { me: Me; setMe: (m: Me) => void }) {
       </h3>
       <p className="mb-2 text-xs" style={{ color: "var(--ink-muted)" }}>
         Paste this into the MT5 indicator&apos;s <code>ApiKey</code> input: trades it uploads to{" "}
-        <code>/api/import</code> are saved to your account.
+        <code>/api/import</code> are saved to your account. Uploads without a valid key are rejected.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <input className="input w-80 font-mono text-xs" readOnly value={showKey ? me.apiKey || "" : "•".repeat(24)} />
-        <button className="btn-ghost" onClick={() => setShowKey((v) => !v)}>
-          {showKey ? "Hide" : "Show"}
+      {!me.apiKey ? (
+        <button className="btn" onClick={() => act({ action: "createKey" }, "API key created.")} disabled={busy}>
+          Create API key
         </button>
-        <button
-          className="btn-ghost"
-          onClick={() => navigator.clipboard?.writeText(me.apiKey || "").then(() => setStatus({ ok: true, message: "Copied." }))}
-        >
-          Copy
-        </button>
-        <button className="btn-ghost" onClick={regenerate} disabled={busy}>
-          Regenerate
-        </button>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input className="input w-80 font-mono text-xs" readOnly value={showKey ? me.apiKey || "" : "•".repeat(24)} />
+          <button className="btn-ghost" onClick={() => setShowKey((v) => !v)}>
+            {showKey ? "Hide" : "Show"}
+          </button>
+          <button
+            className="btn-ghost"
+            onClick={() => navigator.clipboard?.writeText(me.apiKey || "").then(() => setStatus({ ok: true, message: "Copied." }))}
+          >
+            Copy
+          </button>
+          <button className="btn-ghost" onClick={regenerate} disabled={busy}>
+            Regenerate
+          </button>
+          <button className="btn-ghost" onClick={revoke} disabled={busy} style={{ color: "var(--bad-text)" }}>
+            Delete
+          </button>
+        </div>
+      )}
 
       {me.envAdmin ? (
         <p className="mt-5 text-xs" style={{ color: "var(--ink-muted)" }}>

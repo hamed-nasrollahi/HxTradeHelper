@@ -19,11 +19,6 @@ export function newApiKey(): string {
   return `hx_${randomToken(20)}`;
 }
 
-/** Gives a user a personal import API key if they don't have one yet. */
-export async function ensureApiKey(userId: number): Promise<void> {
-  await query("UPDATE users SET api_key = ? WHERE id = ? AND api_key IS NULL", [newApiKey(), userId]);
-}
-
 /**
  * "verify" = confirm a new sign-up, "reset" = forgot password. Both share
  * the verify_* columns; the purpose is mixed into the hash so a code only
@@ -92,5 +87,4 @@ export async function markVerified(userId: number): Promise<void> {
             verify_attempts = 0 WHERE id = ?`,
     [userId]
   );
-  await ensureApiKey(userId);
 }
