@@ -61,6 +61,8 @@ export interface BacktestBatch {
   strategy_color: string | null;
   created_at: string;
   trade_count: number;
+  /** trades already present in an earlier batch of the same strategy + symbol */
+  duplicate_count: number;
 }
 
 export interface TradeExtreme {
@@ -148,7 +150,7 @@ export type GroupDimension =
   | "monthOfYear"
   | "week"
   | "weekday"
-  | "hour"
+  | "session"
   | "direction"
   | "mistake";
 

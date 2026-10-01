@@ -11,7 +11,7 @@ import { BacktestBatch, BacktestRecord, BreakdownGroup, GroupDimension, Summary 
 const DIMENSIONS: { value: GroupDimension; label: string }[] = [
   { value: "strategy", label: "Strategy" }, { value: "symbol", label: "Symbol" },
   { value: "month", label: "Month" }, { value: "week", label: "Week" },
-  { value: "weekday", label: "Day of week" }, { value: "hour", label: "Hour" },
+  { value: "weekday", label: "Day of week" }, { value: "session", label: "Session" },
   { value: "direction", label: "Direction" },
 ];
 
@@ -38,7 +38,7 @@ function groupBatches(batches: BacktestBatch[]): BacktestGroup[] {
       map.set(key, g);
     }
     g.batches.push(b);
-    g.tradeCount += Number(b.trade_count) || 0;
+    g.tradeCount += (Number(b.trade_count) || 0) - (Number(b.duplicate_count) || 0);
   }
   return Array.from(map.values()); // batches arrive newest first, so groups do too
 }
@@ -129,7 +129,7 @@ export default function BacktestsPage() {
       <label className="flex min-w-64 flex-col gap-1 text-xs" style={{color:"var(--ink-2)"}}>Batch
         <select className="input" disabled={!selectedGroup} value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}>
           <option value="">All batches{selectedGroup ? ` (${selectedGroup.batches.length})` : ""}</option>
-          {selectedGroup?.batches.map((b) => <option key={b.id} value={b.id}>{b.created_at.slice(0, 16)} · {b.trade_count} trades</option>)}
+          {selectedGroup?.batches.map((b) => <option key={b.id} value={b.id}>{b.created_at.slice(0, 16)} · {b.trade_count} trades{Number(b.duplicate_count) ? ` (${b.duplicate_count} already in group, ignored)` : ""}</option>)}
         </select>
       </label>
       <label className="flex min-w-52 flex-col gap-1 text-xs" style={{color:"var(--ink-2)"}}>{selected || selectedGroup?.batches.length === 1 ? "Strategy" : "Strategy (all batches)"}

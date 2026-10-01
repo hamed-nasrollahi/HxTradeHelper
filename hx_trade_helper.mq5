@@ -16,6 +16,7 @@
 #include "DialogHx.mqh"
 #include <Controls\Button.mqh>
 #include <Controls\Label.mqh>
+#include <Controls\ComboBox.mqh>
 #include <Arrays\ArrayObj.mqh> // For dynamic object arrays
 #include "TradeElement.mqh"
 
@@ -126,8 +127,10 @@ input double tradeRisk   = 1.0;              // Risk per trade (R)
 DialogHx  AppWindow;
 CButton  btnTabTrade, btnTabTest, btnTabJournal;
 CButton  btnJournal, btnJournalAll, btnJournalToday, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
-btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnExpApi, btnEnbl, btnReCalc, btnReset;
+btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnExpApi, btnEnbl, btnReCalc, btnReset, btnLoadStrategy;
 CLabel   lblRepo;
+CComboBox cmbStrategy;          // dashboard strategies, filled when the Test tab opens
+bool     strategiesLoaded = false;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
 yesterdayEnable = false, atrEnable = true, lastWeekMapEnable = false;
@@ -270,6 +273,10 @@ void PopulateTabs()
   CreateButton(btnReCalc, "btnReCalc", "CLC",57,160,100,180);
   CreateButton(btnExp, "btnExp", "Export",10,190,100,210);
   CreateButton(btnExpApi, "btnExpApi", "Export API",10,220,100,240);
+  cmbStrategy.Create(0, "cmbStrategy", 0, 10, 250, 100, 272);
+  cmbStrategy.ListViewItems(8);
+  AppWindow.Add(cmbStrategy);
+  CreateButton(btnLoadStrategy, "btnLoadStrategy", "Load", 10, 280, 100, 300);
 
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,100,70);
@@ -333,6 +340,16 @@ void ApplyTabVisibility()
    ShowButton(btnReCalc, test);
    ShowButton(btnExp, test);
    ShowButton(btnExpApi, test);
+   ShowButton(btnLoadStrategy, test);
+   // Show() also closes the drop-down, and this runs after every click
+   // (including the one that opens it), so only act on a real change
+   if(test != cmbStrategy.IsVisible())
+   {
+      if(test)
+         cmbStrategy.Show();
+      else
+         cmbStrategy.Hide();
+   }
 
    // Journal tab
    ShowButton(btnJournal, journal);
@@ -353,6 +370,8 @@ void SelectTab(const int tab)
 {
    dialog_tab = tab;
    ApplyTabVisibility();
+   if(tab == TAB_BACKTEST && !strategiesLoaded)
+      FetchStrategies(false);
 }
 
 //+------------------------------------------------------------------+
@@ -1081,6 +1100,10 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       {
          ExportBacktestToApi();
       }
+      else if(sparam == "btnLoadStrategy")
+      {
+         LoadStrategyTrades();
+      }
       else if(sparam == "btnReset")
       {
          ObjectsDeleteAll(0, "WB_", 0, OBJ_FIBO);
@@ -1683,22 +1706,22 @@ void ExportBacktestToApi()
       datetime t1 = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 0);
       datetime t2 = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 1);
       int duration = (int)(MathAbs((double)(t2 - t1)) / 60);
+      double p1 = ObjectGetDouble(0, tradeNames[i], OBJPROP_PRICE, 0);
+      double p2 = ObjectGetDouble(0, tradeNames[i], OBJPROP_PRICE, 1);
       if(i > 0) json += ",";
+      // time1/price1/time2/price2 let LoadStrategyTrades() redraw the fibo
       json += "{\"trade_number\":" + IntegerToString(i + 1)
            + ",\"trade_time\":\"" + dt + "\",\"type\":\"" + type
            + "\",\"result\":\"" + result + "\",\"duration_min\":"
-           + IntegerToString(duration) + "}";
+           + IntegerToString(duration)
+           + ",\"time1\":\"" + TimeToString(t1, TIME_DATE | TIME_MINUTES | TIME_SECONDS)
+           + "\",\"price1\":" + DoubleToString(p1, _Digits)
+           + ",\"time2\":\"" + TimeToString(t2, TIME_DATE | TIME_MINUTES | TIME_SECONDS)
+           + "\",\"price2\":" + DoubleToString(p2, _Digits) + "}";
    }
    json += "]}";
 
-   string url = ApiUrl;
-   int marker = StringFind(url, "/api/import");
-   if(marker >= 0)
-      url = StringSubstr(url, 0, marker) + "/api/backtests/import";
-   else
-      url += "/api/backtests/import";
-
-   int status = UploadJson(url, ApiKey, json, 10000);
+   int status = UploadJson(DashboardUrl("/api/backtests/import"), ApiKey, json, 10000);
    string response;
    StringInit(response, 2048);
    GetLastResponse(response, 2048);
@@ -1706,6 +1729,144 @@ void ExportBacktestToApi()
       Alert("Backtest API export complete: " + IntegerToString(n) + " trade(s).");
    else
       Alert("Backtest API export failed (HTTP " + IntegerToString(status) + "): " + response);
+}
+
+//+------------------------------------------------------------------+
+//| Dashboard base URL (ApiUrl without /api/import) + path           |
+//+------------------------------------------------------------------+
+string DashboardUrl(const string path)
+{
+   string url = ApiUrl;
+   int marker = StringFind(url, "/api/import");
+   if(marker >= 0)
+      url = StringSubstr(url, 0, marker);
+   return url + path;
+}
+
+string ReadLastResponse(const int capacity)
+{
+   string body;
+   StringInit(body, capacity);
+   int len = GetLastResponse(body, capacity);
+   return StringSubstr(body, 0, len);
+}
+
+string UrlEncode(const string s)
+{
+   string r = s;
+   StringReplace(r, "%", "%25");
+   StringReplace(r, "#", "%23");
+   StringReplace(r, "&", "%26");
+   StringReplace(r, "+", "%2B");
+   StringReplace(r, " ", "%20");
+   return r;
+}
+
+//+------------------------------------------------------------------+
+//| Fill the Test-tab strategy list from the dashboard               |
+//+------------------------------------------------------------------+
+bool FetchStrategies(const bool alertOnError)
+{
+   int status = HttpGet(DashboardUrl("/api/strategies"), ApiKey, 5000);
+   string body = ReadLastResponse(65536);
+   if(status != 200)
+   {
+      string msg = "Strategies: could not load from dashboard (HTTP " + IntegerToString(status) + "): " + StringSubstr(body, 0, 200);
+      if(alertOnError)
+         Alert(msg);
+      else
+         Print(msg);
+      return false;
+   }
+
+   cmbStrategy.ItemsClear();
+   int count = 0;
+   string key = "\"id\":";
+   int start = StringFind(body, key);
+   while(start >= 0)
+   {
+      int next = StringFind(body, key, start + 1);
+      string obj = (next >= 0) ? StringSubstr(body, start, next - start) : StringSubstr(body, start);
+      long id = StringToInteger(JsonField(obj, "id"));
+      string name = JsonField(obj, "name");
+      if(id > 0 && name != "")
+      {
+         cmbStrategy.ItemAdd(name, id);
+         count++;
+      }
+      start = next;
+   }
+   strategiesLoaded = true;
+   return count > 0;
+}
+
+//+------------------------------------------------------------------+
+//| Replace the Test-tab fibos with the selected strategy's backtest |
+//| trades for this chart's symbol                                   |
+//+------------------------------------------------------------------+
+void LoadStrategyTrades()
+{
+   string strategyName = cmbStrategy.Select();
+   if(strategyName == "")
+   {
+      if(FetchStrategies(true))
+         Alert("Pick a strategy in the list, then press Load.");
+      else if(strategiesLoaded)
+         Alert("No strategies on the dashboard yet.");
+      return;
+   }
+
+   string url = DashboardUrl("/api/backtests/chart?strategyId=" + IntegerToString(cmbStrategy.Value())
+                             + "&symbol=" + UrlEncode(Symbol()));
+   int status = HttpGet(url, ApiKey, 10000);
+   string body = ReadLastResponse(1048576);
+   if(status != 200)
+   {
+      Alert("Load strategy trades failed (HTTP " + IntegerToString(status) + "): " + StringSubstr(body, 0, 200));
+      return;
+   }
+
+   ObjectsDeleteAll(0, "WB_", 0, OBJ_FIBO);
+   ObjectsDeleteAll(0, "WS_", 0, OBJ_FIBO);
+   ObjectsDeleteAll(0, "LB_", 0, OBJ_FIBO);
+   ObjectsDeleteAll(0, "LS_", 0, OBJ_FIBO);
+   winTrades  = 0;
+   loseTrades = 0;
+
+   int pos = 0;
+   while(true)
+   {
+      int start = StringFind(body, "{\"type\":", pos);
+      if(start < 0)
+         break;
+      int end = StringFind(body, "}", start);
+      if(end < 0)
+         break;
+      pos = end + 1;
+      string obj = StringSubstr(body, start, end - start + 1);
+
+      bool win = (JsonField(obj, "result") == "Win");
+      bool buy = (JsonField(obj, "type") == "Buy");
+      // Same name format the W-B/L-B/W-S/L-S buttons use, so Stats, Export
+      // and Export API treat loaded trades like hand-placed ones
+      string name = (win ? "W" : "L") + (buy ? "B_" : "S_") + JsonField(obj, "trade_time");
+      CreateFibo(name, true, win ? clrDarkGreen : clrMaroon,
+                 StringToTime(JsonField(obj, "time1")), StringToDouble(JsonField(obj, "price1")),
+                 StringToTime(JsonField(obj, "time2")), StringToDouble(JsonField(obj, "price2")));
+      ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
+      if(win)
+         winTrades++;
+      else
+         loseTrades++;
+   }
+   DrawStats();
+   ChartRedraw();
+
+   int skipped = (int)StringToInteger(JsonField(body, "skipped"));
+   string note = skipped > 0
+               ? StringFormat("\n%d older trade(s) have no chart coordinates (uploaded before this version) and were skipped.", skipped)
+               : "";
+   Alert(StringFormat("Loaded %d trade(s) of '%s' for %s.%s", winTrades + loseTrades, strategyName, Symbol(), note));
 }
 
 //+------------------------------------------------------------------+

@@ -16,7 +16,7 @@ const DIMENSIONS: { value: GroupDimension; label: string }[] = [
   { value: "week", label: "Week" },
   { value: "symbol", label: "Symbol" },
   { value: "weekday", label: "Day of week" },
-  { value: "hour", label: "Hour of day" },
+  { value: "session", label: "Session" },
   { value: "direction", label: "Direction" },
   { value: "mistake", label: "Mistake" },
 ];

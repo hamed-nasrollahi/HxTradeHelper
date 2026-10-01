@@ -133,6 +133,17 @@ export async function fetchTrades(params: URLSearchParams, closedOnly: boolean, 
   );
 }
 
+// True when the same trade (time, direction, result, duration) was already
+// uploaded in an earlier batch of the same strategy + symbol. Trade numbers
+// restart with every run, so they are not part of the match.
+export const BACKTEST_DUPLICATE = `EXISTS (
+  SELECT 1 FROM backtest_data d2 JOIN backtests b2 ON b2.id = d2.backtest_id
+  WHERE b2.user_id = b.user_id AND b2.symbol = b.symbol
+    AND b2.strategy_id <=> b.strategy_id
+    AND d2.trade_time = d.trade_time AND d2.type = d.type
+    AND d2.result = d.result AND d2.duration_min = d.duration_min
+    AND d2.id < d.id)`;
+
 export async function fetchBacktests(params: URLSearchParams, userId: number): Promise<BacktestRecord[]> {
   const clauses: string[] = [
     "b.user_id = ?",
@@ -140,7 +151,9 @@ export async function fetchBacktests(params: URLSearchParams, userId: number): P
   ];
   const args: any[] = [userId, userId];
   const add = (sql: string, value: any) => { clauses.push(sql); args.push(value); };
+  // A single batch is shown whole; combined views count each trade once.
   if (params.get("backtestId")) add("b.id = ?", Number(params.get("backtestId")));
+  else clauses.push(`NOT ${BACKTEST_DUPLICATE}`);
   if (params.get("from")) add("d.trade_time >= ?", `${params.get("from")} 00:00:00`);
   if (params.get("to")) add("d.trade_time <= ?", `${params.get("to")} 23:59:59`);
   if (params.get("symbol")) add("b.symbol = ?", params.get("symbol"));
@@ -167,15 +180,20 @@ export async function fetchBacktestBatches(userId: number): Promise<BacktestBatc
   return query<BacktestBatch>(`
     SELECT b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
            b.created_at, s.name AS strategy_name, s.color AS strategy_color,
-           COUNT(d.id) AS trade_count
+           COUNT(d.id) AS trade_count,
+           COALESCE(SUM(d.is_duplicate), 0) AS duplicate_count
     FROM backtests b
     LEFT JOIN strategies s ON s.id = b.strategy_id
-    LEFT JOIN backtest_data d ON d.backtest_id = b.id
+    LEFT JOIN (
+      SELECT d.id, d.backtest_id, ${BACKTEST_DUPLICATE} AS is_duplicate
+      FROM backtest_data d JOIN backtests b ON b.id = d.backtest_id
+      WHERE b.user_id = ?
+    ) d ON d.backtest_id = b.id
     WHERE b.user_id = ?
       AND b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0 AND user_id = ?)
     GROUP BY b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
              b.created_at, s.name, s.color
-    ORDER BY b.created_at DESC, b.id DESC`, [userId, userId]);
+    ORDER BY b.created_at DESC, b.id DESC`, [userId, userId, userId]);
 }
 
 /**

@@ -45,6 +45,11 @@ const STATEMENTS: string[] = [
   `DROP INDEX IF EXISTS uq_strategy_name ON strategies`,
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_mistake_user_name ON mistakes (user_id, name)`,
   `DROP INDEX IF EXISTS uq_mistake_name ON mistakes`,
+  // Fibo anchor points of a backtest trade, so the indicator can redraw it
+  `ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS time1 DATETIME DEFAULT NULL`,
+  `ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS price1 DOUBLE DEFAULT NULL`,
+  `ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS time2 DATETIME DEFAULT NULL`,
+  `ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS price2 DOUBLE DEFAULT NULL`,
 ];
 
 let pending: Promise<void> | null = null;

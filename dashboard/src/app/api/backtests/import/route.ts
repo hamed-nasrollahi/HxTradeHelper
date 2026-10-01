@@ -37,13 +37,17 @@ export async function POST(req: NextRequest) {
       const tradeTime = mtTime(t.trade_time);
       const tradeNumber = Number(t.trade_number);
       if (!tradeTime || !Number.isInteger(tradeNumber)) continue;
+      // Fibo anchors (optional, older indicator builds don't send them)
+      const price = (v: unknown) => Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : null;
       await query(`INSERT INTO backtest_data
-        (backtest_id, trade_number, type, result, duration_min, trade_time)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (backtest_id, trade_number, type, result, duration_min, trade_time, time1, price1, time2, price2)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE type=VALUES(type), result=VALUES(result),
-          duration_min=VALUES(duration_min), trade_time=VALUES(trade_time)`,
+          duration_min=VALUES(duration_min), trade_time=VALUES(trade_time),
+          time1=VALUES(time1), price1=VALUES(price1), time2=VALUES(time2), price2=VALUES(price2)`,
         [backtestId, tradeNumber, String(t.type || ""),
-         String(t.result || ""), Number(t.duration_min) || 0, tradeTime]);
+         String(t.result || ""), Number(t.duration_min) || 0, tradeTime,
+         mtTime(t.time1), price(t.price1), mtTime(t.time2), price(t.price2)]);
       saved++;
     }
     return NextResponse.json({ saved, batchId });

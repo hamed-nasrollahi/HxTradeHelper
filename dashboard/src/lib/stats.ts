@@ -1,3 +1,4 @@
+import { sessionOf } from "./sessions";
 import {
   BreakdownGroup,
   LossStreak,
@@ -261,10 +262,8 @@ function groupKey(t: TradeRecord, dim: GroupDimension): { key: string; label: st
       const wd = weekdayKey(time);
       return { key: wd, label: wd };
     }
-    case "hour": {
-      const hour = time.slice(11, 13) || "00";
-      return { key: hour, label: `${hour}:00` };
-    }
+    case "session":
+      return sessionOf(time);
     case "direction":
       return { key: t.type, label: t.type };
     case "mistake":
@@ -282,7 +281,7 @@ export const BREAKDOWN_DIMENSIONS: GroupDimension[] = [
   "monthOfYear",
   "week",
   "weekday",
-  "hour",
+  "session",
   "direction",
   "mistake",
 ];
@@ -296,7 +295,7 @@ export function comboKey(t: TradeRecord, dims: GroupDimension[]): string {
   return dims.map((d) => groupKey(t, d).key).join(" ");
 }
 
-const TIME_LIKE: GroupDimension[] = ["month", "monthOfYear", "week", "hour"];
+const TIME_LIKE: GroupDimension[] = ["month", "monthOfYear", "week", "session"];
 
 /** Chronological/cyclic dims compare by key; entity-like dims compare by label. */
 function compareByDim(aKey: string, aLabel: string, bKey: string, bLabel: string, dim: GroupDimension): number {
@@ -347,8 +346,8 @@ function finalize(g: BreakdownGroup): void {
 }
 
 /**
- * Group trades by an ordered list of dimensions (e.g. [strategy, hour] =
- * "strategy, then hour of day"). The first (primary) dimension is ordered
+ * Group trades by an ordered list of dimensions (e.g. [strategy, session] =
+ * "strategy, then session"). The first (primary) dimension is ordered
  * by net P/L for entity-like dims or chronologically/cyclically for
  * time-like ones; every dimension after that breaks ties the same way the
  * old single "then by" column did (chronological/cyclic for time-like

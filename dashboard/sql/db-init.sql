@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS backtest_data (
     result VARCHAR(16) NOT NULL,
     duration_min INT NOT NULL DEFAULT 0,
     trade_time DATETIME NOT NULL,
+    time1 DATETIME DEFAULT NULL,
+    price1 DOUBLE DEFAULT NULL,
+    time2 DATETIME DEFAULT NULL,
+    price2 DOUBLE DEFAULT NULL,
     UNIQUE KEY uq_backtest_trade (backtest_id, trade_number),
     KEY idx_backtest_data_time (trade_time),
     CONSTRAINT fk_backtest_data_backtest FOREIGN KEY (backtest_id)

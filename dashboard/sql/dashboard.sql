@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS backtest_data (
       REFERENCES backtests (id) ON DELETE CASCADE
 ) ENGINE = InnoDB;
 
+-- Fibo anchor points, so the indicator can redraw a strategy's backtest trades
+ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS time1 DATETIME DEFAULT NULL;
+ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS price1 DOUBLE DEFAULT NULL;
+ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS time2 DATETIME DEFAULT NULL;
+ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS price2 DOUBLE DEFAULT NULL;
+
 -- db-init.sql may have created these tables before strategies existed.
 -- Add the dashboard relationship separately so existing compose databases
 -- receive it as well.

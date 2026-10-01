@@ -4,7 +4,7 @@ import { computeBreakdown, computeEquity, computeSummary } from "@/lib/stats";
 import { GroupDimension } from "@/lib/types";
 import { errorResponse, requireUser } from "@/lib/session";
 
-const DIMS: GroupDimension[] = ["strategy", "symbol", "month", "week", "weekday", "hour", "direction"];
+const DIMS: GroupDimension[] = ["strategy", "symbol", "month", "week", "weekday", "session", "direction"];
 export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
