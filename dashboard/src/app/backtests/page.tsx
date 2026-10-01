@@ -15,9 +15,38 @@ const DIMENSIONS: { value: GroupDimension; label: string }[] = [
   { value: "direction", label: "Direction" },
 ];
 
+// Backtests run on different days arrive as separate batches. They are
+// analysed together per strategy + symbol; a single batch can still be picked.
+interface BacktestGroup {
+  key: string;
+  strategyId: number | null;
+  strategyName: string;
+  symbol: string;
+  batches: BacktestBatch[];
+  tradeCount: number;
+}
+
+const groupKey = (strategyId: number | null, symbol: string) => `${strategyId ?? "none"}|${symbol}`;
+
+function groupBatches(batches: BacktestBatch[]): BacktestGroup[] {
+  const map = new Map<string, BacktestGroup>();
+  for (const b of batches) {
+    const key = groupKey(b.strategy_id, b.symbol);
+    let g = map.get(key);
+    if (!g) {
+      g = { key, strategyId: b.strategy_id, strategyName: b.strategy_name || "Unassigned", symbol: b.symbol, batches: [], tradeCount: 0 };
+      map.set(key, g);
+    }
+    g.batches.push(b);
+    g.tradeCount += Number(b.trade_count) || 0;
+  }
+  return Array.from(map.values()); // batches arrive newest first, so groups do too
+}
+
 export default function BacktestsPage() {
   const { meta } = useMeta();
   const [batches, setBatches] = useState<BacktestBatch[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [rows, setRows] = useState<BacktestRecord[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -44,16 +73,24 @@ export default function BacktestsPage() {
     });
   };
 
+  const backtestGroups = groupBatches(batches);
+  const selectedGroup = backtestGroups.find((g) => g.key === selectedKey) || null;
+  const selected = selectedGroup?.batches.find((b) => b.id === selectedId) || null;
+
   const loadBatches = () => getJSON<{ batches: BacktestBatch[] }>("/api/backtests?listOnly=1")
     .then((r) => {
+      const fresh = groupBatches(r.batches);
       setBatches(r.batches);
-      setSelectedId((current) => current && r.batches.some((b) => b.id === current) ? current : r.batches[0]?.id || null);
+      setSelectedKey((current) => current && fresh.some((g) => g.key === current) ? current : fresh[0]?.key || null);
+      setSelectedId((current) => current && r.batches.some((b) => b.id === current) ? current : null);
       setError(null);
     }).catch((e) => setError(e.message));
 
   const loadAnalysis = () => {
-    if (!selectedId) { setRows([]); setSummary(null); setGroups([]); return Promise.resolve(); }
-    const extra = { backtestId: String(selectedId) };
+    if (!selectedGroup) { setRows([]); setSummary(null); setGroups([]); return Promise.resolve(); }
+    const extra: Record<string, string> = selected
+      ? { backtestId: String(selected.id) }
+      : { strategyId: selectedGroup.strategyId ? String(selectedGroup.strategyId) : "none", symbol: selectedGroup.symbol };
     return Promise.all([
     getJSON<{ backtests: BacktestRecord[] }>(`/api/backtests${filterQuery({}, extra)}`),
     getJSON<{ summary: Summary; groups: BreakdownGroup[] }>(`/api/backtests/stats${filterQuery({}, { ...extra, groupBy: groupBys.join(",") })}`),
@@ -64,34 +101,42 @@ export default function BacktestsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadBatches(); }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadAnalysis(); }, [selectedId, groupBys]);
+  useEffect(() => { loadAnalysis(); }, [selectedKey, selectedId, groupBys]);
 
+  // Assigns the picked batch, or every batch in the group when "All batches"
+  // is selected, then follows them into their new strategy + symbol group.
   const assign = async (strategyId: string) => {
-    if (!selectedId) return;
+    if (!selectedGroup) return;
+    const targets = selected ? [selected] : selectedGroup.batches;
     try {
-      await sendJSON(`/api/backtests/${selectedId}`, "PATCH", { strategyId: strategyId || null });
-      await Promise.all([loadBatches(), loadAnalysis()]);
+      await Promise.all(targets.map((b) =>
+        sendJSON(`/api/backtests/${b.id}`, "PATCH", { strategyId: strategyId || null })));
+      setSelectedKey(groupKey(strategyId ? Number(strategyId) : null, selectedGroup.symbol));
+      await loadBatches();
     } catch (e: any) { setError(e.message); }
   };
-
-  const selected = batches.find((b) => b.id === selectedId) || null;
 
   return <div>
     <h1 className="mb-4 text-xl font-semibold">Backtests</h1>
     {error ? <ErrorBanner message={error} /> : null}
     <div className="card mb-5 flex flex-wrap items-end gap-4 p-4">
-      <label className="flex min-w-72 flex-col gap-1 text-xs" style={{color:"var(--ink-2)"}}>Uploaded batch
-        <select className="input" value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}>
-          {!batches.length ? <option value="">No uploaded backtests</option> : null}
-          {batches.map((b) => <option key={b.id} value={b.id}>{b.created_at.slice(0, 16)} · {b.symbol} · {b.trade_count} trades</option>)}
+      <label className="flex min-w-72 flex-col gap-1 text-xs" style={{color:"var(--ink-2)"}}>Backtest (strategy · symbol)
+        <select className="input" value={selectedKey || ""} onChange={(e) => { setSelectedKey(e.target.value || null); setSelectedId(null); }}>
+          {!backtestGroups.length ? <option value="">No uploaded backtests</option> : null}
+          {backtestGroups.map((g) => <option key={g.key} value={g.key}>{g.strategyName} · {g.symbol} · {g.batches.length} batch{g.batches.length === 1 ? "" : "es"} · {g.tradeCount} trades</option>)}
         </select>
       </label>
-      <label className="flex min-w-52 flex-col gap-1 text-xs" style={{color:"var(--ink-2)"}}>Strategy
-        <select className="input" disabled={!selected} value={selected?.strategy_id ? String(selected.strategy_id) : ""} onChange={(e) => assign(e.target.value)}>
+      <label className="flex min-w-64 flex-col gap-1 text-xs" style={{color:"var(--ink-2)"}}>Batch
+        <select className="input" disabled={!selectedGroup} value={selectedId || ""} onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}>
+          <option value="">All batches{selectedGroup ? ` (${selectedGroup.batches.length})` : ""}</option>
+          {selectedGroup?.batches.map((b) => <option key={b.id} value={b.id}>{b.created_at.slice(0, 16)} · {b.trade_count} trades</option>)}
+        </select>
+      </label>
+      <label className="flex min-w-52 flex-col gap-1 text-xs" style={{color:"var(--ink-2)"}}>{selected || selectedGroup?.batches.length === 1 ? "Strategy" : "Strategy (all batches)"}
+        <select className="input" disabled={!selectedGroup} value={selectedGroup?.strategyId ? String(selectedGroup.strategyId) : ""} onChange={(e) => assign(e.target.value)}>
           <option value="">Unassigned</option>{meta.strategies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       </label>
-      {selected ? <div className="pb-2 text-sm" style={{color:"var(--ink-2)"}}>Symbol: <strong style={{color:"var(--ink-1)"}}>{selected.symbol}</strong></div> : null}
     </div>
     {summary ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <KpiCard label="Test trades" value={String(summary.totalTrades)} />
@@ -121,7 +166,7 @@ export default function BacktestsPage() {
         <th className="px-3 py-2">Time</th><th>Trade #</th><th>Type</th><th>Result</th><th>Duration</th>
       </tr></thead><tbody>{rows.map((r) => <tr key={r.id} style={{borderTop:"1px solid var(--border)"}}>
         <td className="whitespace-nowrap px-3 py-2">{r.open_time.slice(0,16)}</td><td>{r.trade_number}</td><td>{r.type}</td><td>{r.result}</td><td>{r.duration_min} min</td>
-      </tr>)}{!rows.length ? <tr><td colSpan={5} className="px-4 py-6 text-center">No data for this backtest batch</td></tr> : null}</tbody>
+      </tr>)}{!rows.length ? <tr><td colSpan={5} className="px-4 py-6 text-center">No data for this backtest</td></tr> : null}</tbody>
     </table></div>
   </div>;
 }

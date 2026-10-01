@@ -109,8 +109,8 @@ input bool ShowLondonSession = true;
 input color Color_LondonSession = clrGreen;
 input bool ShowNewYorkSession = true;
 input color Color_NewYorkSession = clrBlue;
-input bool ShowNewYorkPreSession = true;
-input color Color_NewYorkPreSession = clrBlueViolet;
+input bool ShowExtraSessionLines = true;
+input color Color_ExtraSessionLines = clrGray;
 
 input ENUM_LINE_STYLE Style_Session = STYLE_DOT;
 input int Width_Session = 1;
@@ -142,6 +142,9 @@ int ma20Handle=INVALID_HANDLE, ma60Handle=INVALID_HANDLE, ma200Handle=INVALID_HA
 bool ma20Enable = false, ma60Enable = false, ma200Enable = false, statEnable = false;
 
 int dialog_tab=0;
+// An export blocks the chart for a while; clicks made meanwhile are queued
+// and would start it again, so ignore journal clicks right after one ends
+uint journalExportEndTick = 0;
 int winTrades = 0, loseTrades=0;
 
 //+------------------------------------------------------------------+
@@ -869,17 +872,18 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       {
          SelectTab(TAB_JOURNAL);
       }
-      else if(sparam == "btnJournal")
+      else if(sparam == "btnJournal" || sparam == "btnJournalAll" || sparam == "btnJournalToday")
       {
-         ExportTodaysTrades();
-      }
-      else if(sparam == "btnJournalAll")
-      {
-         ExportAllTrades();
-      }
-      else if(sparam == "btnJournalToday")
-      {
-         ExportTodaysTradesToApi();
+         if(GetTickCount() - journalExportEndTick > 1000)
+         {
+            if(sparam == "btnJournal")
+               ExportTodaysTrades();
+            else if(sparam == "btnJournalAll")
+               ExportAllTrades();
+            else
+               ExportTodaysTradesToApi();
+            journalExportEndTick = GetTickCount();
+         }
       }
       else if(sparam == "btnYesterday")
       {
@@ -2102,34 +2106,58 @@ string WriteTradesCsv(JournalTrade &trades[], const string dayFolder, const stri
 int CaptureTradeScreenshots(JournalTrade &trades[], const string dayFolder)
 {
    ENUM_TIMEFRAMES timeframes[] = {PERIOD_H1, PERIOD_M5, PERIOD_M1};
+   int total = ArraySize(trades);
    int saved = 0;
 
-   for(int i = 0; i < ArraySize(trades); i++)
+   string tradeFolders[];
+   ArrayResize(tradeFolders, total);
+   for(int i = 0; i < total; i++)
    {
       string symbolFolder = dayFolder + "\\" + trades[i].symbol;
       string tradeTime = TimeToString(trades[i].openTime, TIME_MINUTES);
       StringReplace(tradeTime, ":", "_");
-      string tradeFolder = symbolFolder + "\\" + tradeTime + "_" + IntegerToString(trades[i].positionId);
+      tradeFolders[i] = symbolFolder + "\\" + tradeTime + "_" + IntegerToString(trades[i].positionId);
 
-      if(!CreateFolder(symbolFolder, false) || !CreateFolder(tradeFolder, false))
+      if(!CreateFolder(symbolFolder, false) || !CreateFolder(tradeFolders[i], false))
       {
          Print("Error creating folder structure for trade ", trades[i].positionId);
-         continue;
+         tradeFolders[i] = "";
       }
+   }
 
-      for(int j = 0; j < ArraySize(timeframes); j++)
+   // One chart per symbol + timeframe, reused for every trade on it, so an
+   // export opens a handful of charts instead of three per trade
+   bool done[];
+   for(int j = 0; j < ArraySize(timeframes); j++)
+   {
+      ArrayResize(done, total);
+      ArrayInitialize(done, false);
+      for(int i = 0; i < total; i++)
       {
-         if(CaptureCleanScreenshot(trades[i].symbol, timeframes[j], trades[i].openTime, tradeFolder))
-            saved++;
+         if(done[i] || tradeFolders[i] == "")
+            continue;
+         string symbol = trades[i].symbol;
+         long chartId = OpenCleanChart(symbol, timeframes[j]);
+         for(int k = i; k < total; k++)
+         {
+            if(done[k] || trades[k].symbol != symbol)
+               continue;
+            done[k] = true;
+            if(chartId > 0 && tradeFolders[k] != ""
+               && CaptureCleanScreenshot(chartId, symbol, timeframes[j], trades[k].openTime, tradeFolders[k]))
+               saved++;
+         }
+         if(chartId > 0 && !ChartClose(chartId))
+            Print("Failed to close screenshot chart ", symbol, " ", EnumToString(timeframes[j]), ". Error ", GetLastError());
       }
    }
    return saved;
 }
 
 //+------------------------------------------------------------------+
-//| Screenshot on a freshly opened chart: no user objects on it      |
+//| Freshly opened chart: no user objects on it                      |
 //+------------------------------------------------------------------+
-bool CaptureCleanScreenshot(const string symbol, const ENUM_TIMEFRAMES timeframe, const datetime tradeTime, const string folder)
+long OpenCleanChart(const string symbol, const ENUM_TIMEFRAMES timeframe)
 {
    SymbolSelect(symbol, true);
    WaitForChartData(symbol, timeframe);
@@ -2138,11 +2166,18 @@ bool CaptureCleanScreenshot(const string symbol, const ENUM_TIMEFRAMES timeframe
    if(chartId <= 0)
    {
       Print("Failed to open ", symbol, " ", EnumToString(timeframe), " chart. Error ", GetLastError());
-      return false;
+      return 0;
    }
-
    ApplyCleanChartLook(chartId);
+   ChartSetInteger(chartId, CHART_BRING_TO_TOP, true);
+   return chartId;
+}
 
+//+------------------------------------------------------------------+
+//| Scroll the clean chart to the trade and save a screenshot        |
+//+------------------------------------------------------------------+
+bool CaptureCleanScreenshot(const long chartId, const string symbol, const ENUM_TIMEFRAMES timeframe, const datetime tradeTime, const string folder)
+{
    // scroll so the trade bar is visible with some bars of context after it
    int barIndex = iBarShift(symbol, timeframe, tradeTime);
    if(barIndex >= 0)
@@ -2152,13 +2187,9 @@ bool CaptureCleanScreenshot(const string symbol, const ENUM_TIMEFRAMES timeframe
          shift = 0;
       ChartNavigate(chartId, CHART_END, shift);
    }
-
-   ChartSetInteger(chartId, CHART_BRING_TO_TOP, true);
    ChartRedraw(chartId);
 
-   bool ok = SaveChartScreenshot(folder, timeframe, chartId);
-   ChartClose(chartId);
-   return ok;
+   return SaveChartScreenshot(folder, timeframe, chartId);
 }
 
 //+------------------------------------------------------------------+
@@ -2616,8 +2647,16 @@ void UpdateLines()
    {
       if(ShowTokyoSession) DrawverticalSessionLines("Vertical_Tokyo", 1, 0, 6, 0, Color_TokyoSession, Style_Session, Width_Session);
       if(ShowLondonSession) DrawverticalSessionLines("Vertical_London", 7, 0, 15, 30, Color_LondonSession, Style_Session, Width_Session);
-      if(ShowNewYorkPreSession) DrawverticalSessionLines("Vertical_NewYorkPre", 12, 30, 20, 0, Color_NewYorkPreSession, Style_Session, Width_Session);
       if(ShowNewYorkSession) DrawverticalSessionLines("Vertical_NewYork", 13, 30, 20, 0, Color_NewYorkSession, Style_Session, Width_Session);
+      if(ShowExtraSessionLines)
+      {
+         // GMT times, same basis as NY open (13:30 GMT -> 16:30 on chart with SummerTime)
+         // chart:          2:30 3:00 7:00 8:00 8:30 18:00 20:00 20:30 21:00
+         int extraHour[] = {  -1,   0,   4,   5,   5,   15,   17,   17,   18};
+         int extraMin[]  = {  30,   0,   0,   0,  30,    0,    0,   30,    0};
+         for(int i = 0; i < ArraySize(extraHour); i++)
+            DrawverticalSessionLine("Vertical_Extra_" + IntegerToString(i), extraHour[i], extraMin[i], Color_ExtraSessionLines, Style_Session, Width_Session);
+      }
    }
 }
 
@@ -2691,6 +2730,27 @@ void DrawverticalSessionLines(string sessionName, int sessionStartGMT_Hour, int 
 
    DrawVerticalLine(sessionName +"_Open", localOpen, clr, style, width);
    DrawVerticalLine(sessionName +"_Close", localClose, clr, style, width);
+}
+
+// Single line at a GMT time, converted the same way as DrawverticalSessionLines (hour may be -1 for previous day)
+void DrawverticalSessionLine(string name, int gmtHour, int gmtMin, color clr, ENUM_LINE_STYLE style, int width)
+{
+   datetime currentDate = TimeCurrent();
+   int dayShift = 0;
+   if(gmtHour < 0)
+     {
+      gmtHour += 24;
+      dayShift = -86400;
+     }
+   // Create datetime value for the GMT time
+   datetime gmtTime = StringToTime(TimeToString(currentDate, TIME_DATE) + " " + IntegerToString(gmtHour) + ":" + IntegerToString(gmtMin)) + dayShift;
+
+   // Convert GMT time to local time
+   datetime localTime = gmtTime + GMTOffset;
+   if(!SummerTime)
+      localTime += 3600;
+
+   DrawVerticalLine(name, localTime, clr, style, width);
 }
 
 //+------------------------------------------------------------------+
