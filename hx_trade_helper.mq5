@@ -110,6 +110,8 @@ input bool ShowLondonSession = true;
 input color Color_LondonSession = clrGreen;
 input bool ShowNewYorkSession = true;
 input color Color_NewYorkSession = clrBlue;
+input bool ShowNewYorkPreSession = true;      // Pre-NY: 1.5h before NY open (12:00 GMT, 15:00 chart)
+input color Color_NewYorkPreSession = clrBlueViolet;
 input bool ShowExtraSessionLines = true;
 input color Color_ExtraSessionLines = clrGray;
 
@@ -2808,6 +2810,8 @@ void UpdateLines()
    {
       if(ShowTokyoSession) DrawverticalSessionLines("Vertical_Tokyo", 1, 0, 6, 0, Color_TokyoSession, Style_Session, Width_Session);
       if(ShowLondonSession) DrawverticalSessionLines("Vertical_London", 7, 0, 15, 30, Color_LondonSession, Style_Session, Width_Session);
+      // runs until the NY open line
+      if(ShowNewYorkPreSession) DrawverticalSessionLine("Vertical_NewYorkPre", 12, 0, Color_NewYorkPreSession, Style_Session, Width_Session);
       if(ShowNewYorkSession) DrawverticalSessionLines("Vertical_NewYork", 13, 30, 20, 0, Color_NewYorkSession, Style_Session, Width_Session);
       if(ShowExtraSessionLines)
       {

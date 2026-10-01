@@ -4,7 +4,8 @@
  * indicator's GMT times shifted +3h (13:30 GMT NY open -> 16:30 on chart;
  * its SummerTime input keeps that offset constant through the year).
  *
- * Lines:  Tokyo 04:00-09:00, London 10:00-18:30, New York 16:30-23:00,
+ * Lines:  Tokyo 04:00-09:00, London 10:00-18:30, NY pre 15:00,
+ *         New York 16:30-23:00,
  *         extra 02:30 03:00 07:00 08:00 08:30 18:00 20:00 20:30 21:00.
  * Each entry starts at a line and runs to the next one.
  */
@@ -17,6 +18,7 @@ const SESSIONS: { start: string; name: string }[] = [
   { start: "08:30", name: "Tokyo" },
   { start: "09:00", name: "London pre" },
   { start: "10:00", name: "London" },
+  { start: "15:00", name: "NY pre" },
   { start: "16:30", name: "London/NY" },
   { start: "18:00", name: "London/NY" },
   { start: "18:30", name: "New York" },
