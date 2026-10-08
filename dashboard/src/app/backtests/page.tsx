@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import ErrorBanner from "@/components/ErrorBanner";
 import KpiCard from "@/components/KpiCard";
+import NoteFilter from "@/components/NoteFilter";
+import NotePicker from "@/components/NotePicker";
 import PnlBarChart from "@/components/charts/PnlBarChart";
 import { useMeta } from "@/components/useMeta";
 import { filterQuery, fmtNum, getJSON, sendJSON } from "@/lib/client";
@@ -52,6 +54,8 @@ export default function BacktestsPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [groups, setGroups] = useState<BreakdownGroup[]>([]);
   const [groupBys, setGroupBys] = useState<GroupDimension[]>(["strategy"]);
+  const [noteFilter, setNoteFilter] = useState<{ noteIds?: string; noteMatch?: string }>({});
+  const [savingRow, setSavingRow] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toggleDim = (d: GroupDimension) => {
@@ -88,9 +92,13 @@ export default function BacktestsPage() {
 
   const loadAnalysis = () => {
     if (!selectedGroup) { setRows([]); setSummary(null); setGroups([]); return Promise.resolve(); }
-    const extra: Record<string, string> = selected
-      ? { backtestId: String(selected.id) }
-      : { strategyId: selectedGroup.strategyId ? String(selectedGroup.strategyId) : "none", symbol: selectedGroup.symbol };
+    const extra: Record<string, string> = {
+      ...(selected
+        ? { backtestId: String(selected.id) }
+        : { strategyId: selectedGroup.strategyId ? String(selectedGroup.strategyId) : "none", symbol: selectedGroup.symbol }),
+      ...(noteFilter.noteIds ? { noteIds: noteFilter.noteIds } : {}),
+      ...(noteFilter.noteMatch ? { noteMatch: noteFilter.noteMatch } : {}),
+    };
     return Promise.all([
     getJSON<{ backtests: BacktestRecord[] }>(`/api/backtests${filterQuery({}, extra)}`),
     getJSON<{ summary: Summary; groups: BreakdownGroup[] }>(`/api/backtests/stats${filterQuery({}, { ...extra, groupBy: groupBys.join(",") })}`),
@@ -101,7 +109,7 @@ export default function BacktestsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadBatches(); }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadAnalysis(); }, [selectedKey, selectedId, groupBys]);
+  useEffect(() => { loadAnalysis(); }, [selectedKey, selectedId, groupBys, noteFilter]);
 
   // Assigns the picked batch, or every batch in the group when "All batches"
   // is selected, then follows them into their new strategy + symbol group.
@@ -114,6 +122,14 @@ export default function BacktestsPage() {
       setSelectedKey(groupKey(strategyId ? Number(strategyId) : null, selectedGroup.symbol));
       await loadBatches();
     } catch (e: any) { setError(e.message); }
+  };
+
+  const setRowNotes = async (row: BacktestRecord, noteIds: number[]) => {
+    setSavingRow(row.id);
+    try {
+      const r = await sendJSON<{ noteIds: number[] }>(`/api/backtests/trades/${row.id}/notes`, "PUT", { noteIds });
+      setRows((rs) => rs.map((x) => x.id === row.id ? { ...x, note_ids: r.noteIds } : x));
+    } catch (e: any) { setError(e.message); } finally { setSavingRow(null); }
   };
 
   return <div>
@@ -137,6 +153,7 @@ export default function BacktestsPage() {
           <option value="">Unassigned</option>{meta.strategies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       </label>
+      <NoteFilter notes={meta.notes} noteIds={noteFilter.noteIds} noteMatch={noteFilter.noteMatch} onChange={setNoteFilter} />
     </div>
     {summary ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <KpiCard label="Test trades" value={String(summary.totalTrades)} />
@@ -163,10 +180,11 @@ export default function BacktestsPage() {
     <div className="card mt-2 p-4"><h2 className="mb-2 text-sm font-medium">Normalized result by {groupBys.map(d => DIMENSIONS.find(x => x.value === d)?.label.toLowerCase()).join(", then ")}</h2><PnlBarChart groups={groups} /></div>
     <div className="card mt-6 overflow-x-auto"><table className="w-full text-sm">
       <thead><tr className="text-left text-xs" style={{color:"var(--ink-muted)"}}>
-        <th className="px-3 py-2">Time</th><th>Trade #</th><th>Type</th><th>Result</th><th>Duration</th>
+        <th className="px-3 py-2">Time</th><th>Trade #</th><th>Type</th><th>Result</th><th>Duration</th><th className="px-3 py-2">Notes</th>
       </tr></thead><tbody>{rows.map((r) => <tr key={r.id} style={{borderTop:"1px solid var(--border)"}}>
         <td className="whitespace-nowrap px-3 py-2">{r.open_time.slice(0,16)}</td><td>{r.trade_number}</td><td>{r.type}</td><td>{r.result}</td><td>{r.duration_min} min</td>
-      </tr>)}{!rows.length ? <tr><td colSpan={5} className="px-4 py-6 text-center">No data for this backtest</td></tr> : null}</tbody>
+        <td className="px-3 py-2"><NotePicker notes={meta.notes} value={r.note_ids || []} disabled={savingRow === r.id} onChange={(ids) => setRowNotes(r, ids)} /></td>
+      </tr>)}{!rows.length ? <tr><td colSpan={6} className="px-4 py-6 text-center">{noteFilter.noteIds ? "No backtest trades with the selected notes" : "No data for this backtest"}</td></tr> : null}</tbody>
     </table></div>
   </div>;
 }

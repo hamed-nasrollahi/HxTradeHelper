@@ -41,11 +41,18 @@ export async function GET(req: NextRequest) {
     } catch {
       // mistakes table not created yet - dashboard still works read-only
     }
+    let notes: any[] = [];
+    try {
+      notes = await query("SELECT id, text FROM notes WHERE user_id = ? ORDER BY text", [user.id]);
+    } catch {
+      // notes table not created yet
+    }
     return NextResponse.json({
       symbols: symbols.map((r) => r.symbol),
       accounts: accounts.map((r) => r.account),
       strategies,
       mistakes,
+      notes,
     });
   } catch (e: any) {
     return errorResponse(e, "query failed");

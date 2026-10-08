@@ -17,6 +17,7 @@ Built with Next.js 14 (App Router, TypeScript), Recharts and Tailwind CSS.
 | **Trades** | Filterable trade list with open and close time, planned R:R and realized R; assign a strategy to each trade inline, and review entry/exit correctness with a mistake tag |
 | **Strategies** | Create/edit/delete strategies (name, description, color) with per-strategy quick stats |
 | **Mistakes** | Create/edit/delete recurring-mistake tags (name, description) with a count of tagged trades |
+| **Notes** | Create/edit/delete free-text notes with a count of linked trades and backtest trades. Attach any number of notes to a trade (Trades page) or a backtest trade (Backtests page), and filter Overview, Breakdown, Trades and the Backtest report by notes (trades with any, or all, of the selected notes) |
 | **Settings** | Your account: personal import API key (create / show / copy / regenerate / delete) and password. Admins also get the MariaDB connection with a test-connection button and the legacy global import key |
 | **Admin** *(admins)* | User counts, new users per month for the last 6 months, top 10 gainers and losers by net P/L (30 days / 90 days / 1 year / all time) |
 | **Users** *(admins)* | Search users; confirm an account manually, disable / enable, reset a password (optionally emailed via Brevo), grant / remove admin |
@@ -32,7 +33,7 @@ service). One-time database preparation:
 
 ```
 mysql -u root -p <your-db> < sql/db-init.sql     # base trades table (new DB only)
-mysql -u root -p <your-db> < sql/dashboard.sql   # strategies + mistakes tables, trade review columns
+mysql -u root -p <your-db> < sql/dashboard.sql   # strategies + mistakes + notes tables, trade review columns
 ```
 
 Then:

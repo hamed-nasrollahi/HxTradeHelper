@@ -50,6 +50,30 @@ const STATEMENTS: string[] = [
   `ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS price1 DOUBLE DEFAULT NULL`,
   `ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS time2 DATETIME DEFAULT NULL`,
   `ALTER TABLE backtest_data ADD COLUMN IF NOT EXISTS price2 DOUBLE DEFAULT NULL`,
+  // Free-text notes, attachable (many-to-many) to trades and backtest trades
+  `CREATE TABLE IF NOT EXISTS notes (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    user_id    INT       NOT NULL,
+    text       TEXT      NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_notes_user (user_id)
+  ) ENGINE = InnoDB`,
+  `CREATE TABLE IF NOT EXISTS trade_notes (
+    trade_id BIGINT NOT NULL,
+    note_id  INT    NOT NULL,
+    PRIMARY KEY (trade_id, note_id),
+    KEY idx_trade_notes_note (note_id),
+    CONSTRAINT fk_trade_notes_trade FOREIGN KEY (trade_id) REFERENCES trades (id) ON DELETE CASCADE,
+    CONSTRAINT fk_trade_notes_note FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
+  ) ENGINE = InnoDB`,
+  `CREATE TABLE IF NOT EXISTS backtest_data_notes (
+    backtest_data_id BIGINT NOT NULL,
+    note_id          INT    NOT NULL,
+    PRIMARY KEY (backtest_data_id, note_id),
+    KEY idx_backtest_data_notes_note (note_id),
+    CONSTRAINT fk_backtest_data_notes_data FOREIGN KEY (backtest_data_id) REFERENCES backtest_data (id) ON DELETE CASCADE,
+    CONSTRAINT fk_backtest_data_notes_note FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
+  ) ENGINE = InnoDB`,
 ];
 
 let pending: Promise<void> | null = null;

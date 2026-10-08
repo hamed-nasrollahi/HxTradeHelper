@@ -112,7 +112,48 @@ export function buildTradeWhere(params: URLSearchParams, closedOnly: boolean, us
   if (params.get("excludeMistakes") === "1") {
     clauses.push("t.entry_correct = 1", "t.exit_correct = 1");
   }
+  const notes = noteClause(params, "t.id", "trade_notes", "trade_id");
+  if (notes) {
+    clauses.push(notes.sql);
+    args.push(...notes.args);
+  }
   return { where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", args };
+}
+
+/** Parses `noteIds=1,2,3` into distinct positive ids. */
+export function parseNoteIds(raw: string | null): number[] {
+  return Array.from(
+    new Set((raw || "").split(",").map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))
+  );
+}
+
+/**
+ * `noteIds` filter: rows linked to any of the notes, or to every one of them
+ * with `noteMatch=all`. `linkTable.linkColumn` references `idColumn`.
+ */
+function noteClause(
+  params: URLSearchParams,
+  idColumn: string,
+  linkTable: "trade_notes" | "backtest_data_notes",
+  linkColumn: string
+): { sql: string; args: any[] } | null {
+  const ids = parseNoteIds(params.get("noteIds"));
+  if (!ids.length) return null;
+  if (params.get("noteMatch") === "all") {
+    return {
+      sql: `(SELECT COUNT(*) FROM ${linkTable} n WHERE n.${linkColumn} = ${idColumn} AND n.note_id IN (?)) = ?`,
+      args: [ids, ids.length],
+    };
+  }
+  return { sql: `EXISTS (SELECT 1 FROM ${linkTable} n WHERE n.${linkColumn} = ${idColumn} AND n.note_id IN (?))`, args: [ids] };
+}
+
+/** GROUP_CONCAT'ed note ids ("3,7" / null) -> [3, 7] */
+function withNoteIds<T extends { note_ids: unknown }>(rows: T[]): T[] {
+  for (const r of rows) {
+    r.note_ids = r.note_ids ? String(r.note_ids).split(",").map(Number) : [];
+  }
+  return rows;
 }
 
 const TRADE_SELECT = `
@@ -120,16 +161,16 @@ SELECT t.id, t.account, t.position_id, t.symbol, t.type, t.result, t.rr,
        t.entry_price, t.stop_loss, t.take_profit, t.close_price, t.profit,
        t.open_time, t.close_time, t.is_open, t.strategy_id,
        s.name AS strategy_name, s.color AS strategy_color,
-       t.entry_correct, t.exit_correct, t.mistake_id, m.name AS mistake_name
+       t.entry_correct, t.exit_correct, t.mistake_id, m.name AS mistake_name,
+       (SELECT GROUP_CONCAT(tn.note_id ORDER BY tn.note_id) FROM trade_notes tn WHERE tn.trade_id = t.id) AS note_ids
 FROM trades t
 LEFT JOIN strategies s ON s.id = t.strategy_id
 LEFT JOIN mistakes m ON m.id = t.mistake_id`;
 
 export async function fetchTrades(params: URLSearchParams, closedOnly: boolean, userId: number): Promise<TradeRecord[]> {
   const { where, args } = buildTradeWhere(params, closedOnly, userId);
-  return query<TradeRecord>(
-    `${TRADE_SELECT} ${where} ORDER BY COALESCE(t.close_time, t.open_time), t.id`,
-    args
+  return withNoteIds(
+    await query<TradeRecord>(`${TRADE_SELECT} ${where} ORDER BY COALESCE(t.close_time, t.open_time), t.id`, args)
   );
 }
 
@@ -161,8 +202,13 @@ export async function fetchBacktests(params: URLSearchParams, userId: number): P
   const strategyId = params.get("strategyId");
   if (strategyId === "none") clauses.push("b.strategy_id IS NULL");
   else if (strategyId) add("b.strategy_id = ?", Number(strategyId));
+  const notes = noteClause(params, "d.id", "backtest_data_notes", "backtest_data_id");
+  if (notes) {
+    clauses.push(notes.sql);
+    args.push(...notes.args);
+  }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return query<BacktestRecord>(`
+  return withNoteIds(await query<BacktestRecord>(`
     SELECT d.id, b.id AS backtest_id, b.batch_id, b.account, d.trade_number, b.symbol, d.type,
            d.result, d.duration_min, d.trade_time AS open_time,
            d.trade_time AS close_time, 0 AS position_id, NULL AS rr,
@@ -170,10 +216,12 @@ export async function fetchBacktests(params: URLSearchParams, userId: number): P
            NULL AS close_price,
            CASE d.result WHEN 'Win' THEN 1 WHEN 'Lose' THEN -1 ELSE 0 END AS profit,
            0 AS is_open, b.strategy_id, s.name AS strategy_name,
-           s.color AS strategy_color
+           s.color AS strategy_color,
+           (SELECT GROUP_CONCAT(dn.note_id ORDER BY dn.note_id) FROM backtest_data_notes dn
+            WHERE dn.backtest_data_id = d.id) AS note_ids
     FROM backtests b JOIN backtest_data d ON d.backtest_id = b.id
     LEFT JOIN strategies s ON s.id = b.strategy_id
-    ${where} ORDER BY d.trade_time, d.id`, args);
+    ${where} ORDER BY d.trade_time, d.id`, args));
 }
 
 export async function fetchBacktestBatches(userId: number): Promise<BacktestBatch[]> {
@@ -218,4 +266,41 @@ export async function ownsRow(table: "strategies" | "mistakes", id: number | nul
   if (id === null) return true;
   const rows = await query(`SELECT 1 FROM ${table} WHERE id = ? AND user_id = ?`, [id, userId]);
   return rows.length > 0;
+}
+
+/**
+ * Replaces the notes linked to one trade / backtest trade (the caller has
+ * checked the row belongs to the user). Returns the new sorted note ids, or
+ * null when a note id is not one of the user's.
+ */
+export async function setLinkedNotes(
+  linkTable: "trade_notes" | "backtest_data_notes",
+  linkColumn: "trade_id" | "backtest_data_id",
+  rowId: number,
+  noteIds: number[],
+  userId: number
+): Promise<number[] | null> {
+  const owned = noteIds.length
+    ? (await query<{ id: number }>("SELECT id FROM notes WHERE user_id = ? AND id IN (?)", [userId, noteIds])).map(
+        (r) => Number(r.id)
+      )
+    : [];
+  if (owned.length !== noteIds.length) return null;
+  const p = await getPool();
+  await ensureSchema(p, poolKey);
+  const conn = await p.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(`DELETE FROM ${linkTable} WHERE ${linkColumn} = ?`, [rowId]);
+    if (owned.length) {
+      await conn.query(`INSERT INTO ${linkTable} (${linkColumn}, note_id) VALUES ?`, [owned.map((id) => [rowId, id])]);
+    }
+    await conn.commit();
+  } catch (e) {
+    await conn.rollback().catch(() => {});
+    throw e;
+  } finally {
+    conn.release();
+  }
+  return owned.sort((a, b) => a - b);
 }
