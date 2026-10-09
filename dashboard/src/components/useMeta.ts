@@ -8,10 +8,11 @@ export interface Meta {
   accounts: number[];
   strategies: { id: number; name: string; color: string }[];
   mistakes: { id: number; name: string }[];
+  notes: { id: number; text: string }[];
 }
 
 export function useMeta(): { meta: Meta; error: string | null; reload: () => void } {
-  const [meta, setMeta] = useState<Meta>({ symbols: [], accounts: [], strategies: [], mistakes: [] });
+  const [meta, setMeta] = useState<Meta>({ symbols: [], accounts: [], strategies: [], mistakes: [], notes: [] });
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 

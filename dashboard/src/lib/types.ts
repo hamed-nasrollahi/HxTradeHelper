@@ -21,6 +21,7 @@ export interface TradeRecord {
   exit_correct: number; // 1 = closed correctly, 0 = mistake
   mistake_id: number | null;
   mistake_name: string | null;
+  note_ids: number[];
 }
 
 export interface Strategy {
@@ -37,6 +38,14 @@ export interface Mistake {
   description: string | null;
   created_at: string;
   trade_count: number;
+}
+
+export interface Note {
+  id: number;
+  text: string;
+  created_at: string;
+  trade_count: number;
+  backtest_count: number;
 }
 
 export interface AccountVisibility {
@@ -161,6 +170,8 @@ export interface TradeFilters {
   symbol?: string;
   strategyId?: string; // number, or "none" for unassigned
   direction?: string; // Buy / Sell
+  noteIds?: string; // comma-separated note ids
+  noteMatch?: string; // "all" = linked to every selected note, otherwise any
 }
 
 export interface NewsEvent {

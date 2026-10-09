@@ -1,6 +1,7 @@
 "use client";
 
 import { TradeFilters } from "@/lib/types";
+import NoteFilter from "./NoteFilter";
 
 interface Props {
   filters: TradeFilters;
@@ -8,9 +9,11 @@ interface Props {
   symbols: string[];
   accounts: number[];
   strategies: { id: number; name: string }[];
+  /** shows the Notes filter when given */
+  notes?: { id: number; text: string }[];
 }
 
-export default function Filters({ filters, onChange, symbols, accounts, strategies }: Props) {
+export default function Filters({ filters, onChange, symbols, accounts, strategies, notes }: Props) {
   const set = (patch: Partial<TradeFilters>) => onChange({ ...filters, ...patch });
 
   return (
@@ -91,6 +94,7 @@ export default function Filters({ filters, onChange, symbols, accounts, strategi
           <option value="Sell">Sell</option>
         </select>
       </label>
+      {notes ? <NoteFilter notes={notes} noteIds={filters.noteIds} noteMatch={filters.noteMatch} onChange={set} /> : null}
       <button className="btn-ghost" onClick={() => onChange({})}>
         Clear
       </button>

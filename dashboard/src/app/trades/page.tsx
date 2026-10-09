@@ -3,13 +3,23 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Filters from "@/components/Filters";
+import NotePicker from "@/components/NotePicker";
 import ErrorBanner from "@/components/ErrorBanner";
 import { useMeta } from "@/components/useMeta";
 import { filterQuery, fmtMoney, fmtNum, fmtR, getJSON, profitColor, sendJSON } from "@/lib/client";
 import { tradeR } from "@/lib/stats";
 import { TradeFilters, TradeRecord } from "@/lib/types";
 
-const FILTER_KEYS: (keyof TradeFilters)[] = ["from", "to", "account", "symbol", "strategyId", "direction"];
+const FILTER_KEYS: (keyof TradeFilters)[] = [
+  "from",
+  "to",
+  "account",
+  "symbol",
+  "strategyId",
+  "direction",
+  "noteIds",
+  "noteMatch",
+];
 
 /** A Breakdown row opened from the Breakdown page (?groupBy=...&group=...). */
 interface BreakdownGroupFilter {
@@ -147,6 +157,18 @@ function TradesView() {
     }
   };
 
+  const setNotes = async (trade: TradeRecord, noteIds: number[]) => {
+    setSaving(trade.id);
+    try {
+      const r = await sendJSON<{ noteIds: number[] }>(`/api/trades/${trade.id}/notes`, "PUT", { noteIds });
+      setTrades((ts) => ts.map((t) => (t.id === trade.id ? { ...t, note_ids: r.noteIds } : t)));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(null);
+    }
+  };
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -156,7 +178,14 @@ function TradesView() {
         </button>
       </div>
       {error ? <ErrorBanner message={error} /> : null}
-      <Filters filters={filters} onChange={setFilters} symbols={meta.symbols} accounts={meta.accounts} strategies={meta.strategies} />
+      <Filters
+        filters={filters}
+        onChange={setFilters}
+        symbols={meta.symbols}
+        accounts={meta.accounts}
+        strategies={meta.strategies}
+        notes={meta.notes}
+      />
       {breakdownGroup ? (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
           <span
@@ -208,6 +237,7 @@ function TradesView() {
                 OK
               </th>
               <th className="px-2 py-2 font-medium">Mistake</th>
+              <th className="px-2 py-2 font-medium">Notes</th>
             </tr>
           </thead>
           <tbody>
@@ -302,11 +332,19 @@ function TradesView() {
                     ))}
                   </select>
                 </td>
+                <td className="px-2 py-2">
+                  <NotePicker
+                    notes={meta.notes}
+                    value={t.note_ids || []}
+                    disabled={saving === t.id}
+                    onChange={(ids) => setNotes(t, ids)}
+                  />
+                </td>
               </tr>
             ))}
             {trades.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center" colSpan={16} style={{ color: "var(--ink-muted)" }}>
+                <td className="px-4 py-6 text-center" colSpan={17} style={{ color: "var(--ink-muted)" }}>
                   No trades in this range
                 </td>
               </tr>
