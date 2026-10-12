@@ -135,6 +135,14 @@ export interface BreakdownGroup {
   color?: string;
 }
 
+/** A backtest breakdown row: the group's totals plus its streaks and drawdown. */
+export interface BacktestGroup extends BreakdownGroup {
+  breakEvens: number;
+  maxDrawdown: number; // in R (each backtest trade is +1R / -1R / 0)
+  longestWinStreak: number;
+  longestLossStreak: number;
+}
+
 export interface MonthWinRate {
   key: string; // "2026-07"
   label: string; // "Jul 2026"
@@ -159,6 +167,7 @@ export type GroupDimension =
   | "monthOfYear"
   | "week"
   | "weekday"
+  | "hour"
   | "session"
   | "direction"
   | "mistake";

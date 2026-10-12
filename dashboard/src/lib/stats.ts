@@ -262,6 +262,10 @@ function groupKey(t: TradeRecord, dim: GroupDimension): { key: string; label: st
       const wd = weekdayKey(time);
       return { key: wd, label: wd };
     }
+    case "hour": {
+      const h = time.slice(11, 13) || "00";
+      return { key: h, label: `${h}:00` };
+    }
     case "session":
       return sessionOf(time);
     case "direction":
@@ -271,6 +275,24 @@ function groupKey(t: TradeRecord, dim: GroupDimension): { key: string; label: st
         ? { key: `m${t.mistake_id}`, label: t.mistake_name || `#${t.mistake_id}` }
         : { key: "none", label: "No mistake" };
   }
+}
+
+/**
+ * Calendar filters that SQL can't express the way the dashboard labels them
+ * (sessions follow the indicator's session lines): comma-separated
+ * `sessions` (sessionOf keys), `weekdays` (Mon..Sun), `months` (01..12) and
+ * `hours` (00..23). A trade passes when it matches every given list.
+ */
+export function matchesCalendarFilters(t: TradeRecord, params: URLSearchParams): boolean {
+  const list = (name: string) => (params.get(name) || "").split(",").filter(Boolean);
+  const time = tradeTime(t);
+  const checks: [string[], string][] = [
+    [list("sessions"), sessionOf(time).key],
+    [list("weekdays"), weekdayKey(time)],
+    [list("months"), time.slice(5, 7)],
+    [list("hours"), time.slice(11, 13)],
+  ];
+  return checks.every(([allowed, value]) => !allowed.length || allowed.includes(value));
 }
 
 /** Every dimension the Breakdown page (and its drill-down on /trades) accepts. */
@@ -295,7 +317,7 @@ export function comboKey(t: TradeRecord, dims: GroupDimension[]): string {
   return dims.map((d) => groupKey(t, d).key).join(" ");
 }
 
-const TIME_LIKE: GroupDimension[] = ["month", "monthOfYear", "week", "session"];
+const TIME_LIKE: GroupDimension[] = ["month", "monthOfYear", "week", "hour", "session"];
 
 /** Chronological/cyclic dims compare by key; entity-like dims compare by label. */
 function compareByDim(aKey: string, aLabel: string, bKey: string, bLabel: string, dim: GroupDimension): number {

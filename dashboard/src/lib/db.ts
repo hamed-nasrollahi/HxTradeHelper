@@ -2,6 +2,7 @@ import mysql from "mysql2/promise";
 import { DbSettings, loadSettings } from "./settings";
 import { BacktestBatch, BacktestRecord, TradeRecord } from "./types";
 import { ensureSchema } from "./migrate";
+import { matchesCalendarFilters } from "./stats";
 
 let pool: mysql.Pool | null = null;
 let poolKey = "";
@@ -185,30 +186,44 @@ export const BACKTEST_DUPLICATE = `EXISTS (
     AND d2.result = d.result AND d2.duration_min = d.duration_min
     AND d2.id < d.id)`;
 
+/** Comma-separated query value -> distinct non-empty entries. */
+function listParam(params: URLSearchParams, name: string): string[] {
+  return Array.from(new Set((params.get(name) || "").split(",").map((v) => v.trim()).filter(Boolean)));
+}
+
+/**
+ * Backtest trades for the Backtests page. Backtests are not tied to an MT5
+ * account here: the account a run was uploaded from (and whether it is
+ * hidden on the Accounts page) does not filter them. `symbol` and
+ * `strategyId` take comma-separated lists ("none" = unassigned); the
+ * calendar filters (sessions, weekdays, months, hours) are applied after the
+ * query, see `matchesCalendarFilters`.
+ */
 export async function fetchBacktests(params: URLSearchParams, userId: number): Promise<BacktestRecord[]> {
-  const clauses: string[] = [
-    "b.user_id = ?",
-    "b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0 AND user_id = ?)",
-  ];
-  const args: any[] = [userId, userId];
+  const clauses: string[] = ["b.user_id = ?"];
+  const args: any[] = [userId];
   const add = (sql: string, value: any) => { clauses.push(sql); args.push(value); };
   // A single batch is shown whole; combined views count each trade once.
   if (params.get("backtestId")) add("b.id = ?", Number(params.get("backtestId")));
   else clauses.push(`NOT ${BACKTEST_DUPLICATE}`);
   if (params.get("from")) add("d.trade_time >= ?", `${params.get("from")} 00:00:00`);
   if (params.get("to")) add("d.trade_time <= ?", `${params.get("to")} 23:59:59`);
-  if (params.get("symbol")) add("b.symbol = ?", params.get("symbol"));
+  const symbols = listParam(params, "symbol");
+  if (symbols.length) add("b.symbol IN (?)", symbols);
   if (params.get("direction")) add("d.type = ?", params.get("direction"));
-  const strategyId = params.get("strategyId");
-  if (strategyId === "none") clauses.push("b.strategy_id IS NULL");
-  else if (strategyId) add("b.strategy_id = ?", Number(strategyId));
+  const strategies = listParam(params, "strategyId");
+  const strategyIds = strategies.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  const unassigned = strategies.includes("none");
+  if (strategyIds.length && unassigned) add("(b.strategy_id IN (?) OR b.strategy_id IS NULL)", strategyIds);
+  else if (strategyIds.length) add("b.strategy_id IN (?)", strategyIds);
+  else if (unassigned) clauses.push("b.strategy_id IS NULL");
   const notes = noteClause(params, "d.id", "backtest_data_notes", "backtest_data_id");
   if (notes) {
     clauses.push(notes.sql);
     args.push(...notes.args);
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return withNoteIds(await query<BacktestRecord>(`
+  const rows = withNoteIds(await query<BacktestRecord>(`
     SELECT d.id, b.id AS backtest_id, b.batch_id, b.account, d.trade_number, b.symbol, d.type,
            d.result, d.duration_min, d.trade_time AS open_time,
            d.trade_time AS close_time, 0 AS position_id, NULL AS rr,
@@ -222,6 +237,7 @@ export async function fetchBacktests(params: URLSearchParams, userId: number): P
     FROM backtests b JOIN backtest_data d ON d.backtest_id = b.id
     LEFT JOIN strategies s ON s.id = b.strategy_id
     ${where} ORDER BY d.trade_time, d.id`, args));
+  return rows.filter((r) => matchesCalendarFilters(r, params));
 }
 
 export async function fetchBacktestBatches(userId: number): Promise<BacktestBatch[]> {
@@ -238,10 +254,9 @@ export async function fetchBacktestBatches(userId: number): Promise<BacktestBatc
       WHERE b.user_id = ?
     ) d ON d.backtest_id = b.id
     WHERE b.user_id = ?
-      AND b.account NOT IN (SELECT account FROM account_visibility WHERE visible = 0 AND user_id = ?)
     GROUP BY b.id, b.batch_id, b.account, b.symbol, b.strategy_id,
              b.created_at, s.name, s.color
-    ORDER BY b.created_at DESC, b.id DESC`, [userId, userId, userId]);
+    ORDER BY b.created_at DESC, b.id DESC`, [userId, userId]);
 }
 
 /**
