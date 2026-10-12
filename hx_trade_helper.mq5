@@ -2858,9 +2858,10 @@ void UpdateLines()
       if(ShowExtraSessionLines)
       {
          // GMT times, same basis as NY open (13:30 GMT -> 16:30 on chart with SummerTime)
-         // chart:          2:30 3:00 7:00 8:00 8:30 18:00 20:00 20:30 21:00
-         int extraHour[] = {  -1,   0,   4,   5,   5,   15,   17,   17,   18};
-         int extraMin[]  = {  30,   0,   0,   0,  30,    0,    0,   30,    0};
+         // 11:00 / 13:00 chart = 1h / 3h after London open
+         // chart:          2:30 3:00 7:00 8:00 8:30 11:00 13:00 18:00 20:00 20:30 21:00
+         int extraHour[] = {  -1,   0,   4,   5,   5,    8,   10,   15,   17,   17,   18};
+         int extraMin[]  = {  30,   0,   0,   0,  30,    0,    0,    0,    0,   30,    0};
          for(int i = 0; i < ArraySize(extraHour); i++)
             DrawverticalSessionLine("Vertical_Extra_" + IntegerToString(i), extraHour[i], extraMin[i], Color_ExtraSessionLines, Style_Session, Width_Session);
       }
