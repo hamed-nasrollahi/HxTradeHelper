@@ -19,14 +19,21 @@ const DIMENSIONS: { value: GroupDimension; label: string }[] = [
 
 // Backtests run on different days arrive as separate batches. They are
 // analysed together per strategy + symbol; a single batch can still be picked.
+// A batch whose trades are all already in the group (e.g. the same trades
+// re-uploaded) adds nothing, so it is not listed - but it still moves and is
+// deleted with the group, hence `allBatches`.
 interface BacktestGroup {
   key: string;
   strategyId: number | null;
   strategyName: string;
   symbol: string;
   batches: BacktestBatch[];
+  allBatches: BacktestBatch[];
   tradeCount: number;
 }
+
+const isRepeat = (b: BacktestBatch) =>
+  Number(b.trade_count) > 0 && Number(b.duplicate_count) >= Number(b.trade_count);
 
 const groupKey = (strategyId: number | null, symbol: string) => `${strategyId ?? "none"}|${symbol}`;
 
@@ -36,10 +43,11 @@ function groupBatches(batches: BacktestBatch[]): BacktestGroup[] {
     const key = groupKey(b.strategy_id, b.symbol);
     let g = map.get(key);
     if (!g) {
-      g = { key, strategyId: b.strategy_id, strategyName: b.strategy_name || "Unassigned", symbol: b.symbol, batches: [], tradeCount: 0 };
+      g = { key, strategyId: b.strategy_id, strategyName: b.strategy_name || "Unassigned", symbol: b.symbol, batches: [], allBatches: [], tradeCount: 0 };
       map.set(key, g);
     }
-    g.batches.push(b);
+    g.allBatches.push(b);
+    if (!isRepeat(b)) g.batches.push(b);
     g.tradeCount += (Number(b.trade_count) || 0) - (Number(b.duplicate_count) || 0);
   }
   return Array.from(map.values()); // batches arrive newest first, so groups do too
@@ -109,19 +117,36 @@ export default function BacktestsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadBatches(); }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadAnalysis(); }, [selectedKey, selectedId, groupBys, noteFilter]);
+  useEffect(() => { loadAnalysis(); }, [batches, selectedKey, selectedId, groupBys, noteFilter]);
 
   // Assigns the picked batch, or every batch in the group when "All batches"
   // is selected, then follows them into their new strategy + symbol group.
   const assign = async (strategyId: string) => {
     if (!selectedGroup) return;
-    const targets = selected ? [selected] : selectedGroup.batches;
+    const targets = selected ? [selected] : selectedGroup.allBatches;
     try {
       await Promise.all(targets.map((b) =>
         sendJSON(`/api/backtests/${b.id}`, "PATCH", { strategyId: strategyId || null })));
       setSelectedKey(groupKey(strategyId ? Number(strategyId) : null, selectedGroup.symbol));
       await loadBatches();
     } catch (e: any) { setError(e.message); }
+  };
+
+  // Deletes the picked batch, or the whole strategy + symbol group when
+  // "All batches" is selected.
+  const removeBatches = async () => {
+    if (!selectedGroup) return;
+    const targets = selected ? [selected] : selectedGroup.allBatches;
+    const trades = targets.reduce((n, b) => n + (Number(b.trade_count) || 0), 0);
+    const what = selected
+      ? `batch ${selected.created_at.slice(0, 16)}`
+      : `all ${targets.length} batch${targets.length === 1 ? "" : "es"} of ${selectedGroup.strategyName} · ${selectedGroup.symbol}`;
+    if (!confirm(`Delete ${what}? Its ${trades} trade record(s) and their notes are removed permanently.`)) return;
+    try {
+      for (const b of targets) await sendJSON(`/api/backtests/${b.id}`, "DELETE", {});
+      setSelectedId(null);
+      await loadBatches(); // the analysis effect follows the new batch list
+    } catch (e: any) { setError(e.message); await loadBatches(); }
   };
 
   const setRowNotes = async (row: BacktestRecord, noteIds: number[]) => {
@@ -153,6 +178,9 @@ export default function BacktestsPage() {
           <option value="">Unassigned</option>{meta.strategies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       </label>
+      <button className="btn-ghost" disabled={!selectedGroup} style={{ color: "var(--bad-text)" }} onClick={removeBatches}>
+        {selected || selectedGroup?.allBatches.length === 1 ? "Delete batch" : "Delete all batches"}
+      </button>
       <NoteFilter notes={meta.notes} noteIds={noteFilter.noteIds} noteMatch={noteFilter.noteMatch} onChange={setNoteFilter} />
     </div>
     {summary ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

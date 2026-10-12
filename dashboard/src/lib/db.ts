@@ -245,6 +245,37 @@ export async function fetchBacktestBatches(userId: number): Promise<BacktestBatc
 }
 
 /**
+ * Removes one uploaded batch with all of its trades and their note links.
+ * Done explicitly (not via FK cascades) because older databases may lack
+ * the constraints. Returns false when the batch is not the user's.
+ */
+export async function deleteBacktest(backtestId: number, userId: number): Promise<boolean> {
+  const p = await getPool();
+  await ensureSchema(p, poolKey);
+  const conn = await p.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [owned]: any = await conn.query(
+      "SELECT id FROM backtests WHERE id = ? AND user_id = ? FOR UPDATE", [backtestId, userId]);
+    if (!owned.length) {
+      await conn.rollback();
+      return false;
+    }
+    await conn.query(`DELETE dn FROM backtest_data_notes dn
+      JOIN backtest_data d ON d.id = dn.backtest_data_id WHERE d.backtest_id = ?`, [backtestId]);
+    await conn.query("DELETE FROM backtest_data WHERE backtest_id = ?", [backtestId]);
+    await conn.query("DELETE FROM backtests WHERE id = ?", [backtestId]);
+    await conn.commit();
+    return true;
+  } catch (e) {
+    await conn.rollback().catch(() => {});
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
  * An MT5 account belongs to whichever user first uploaded it. Imports for
  * an account another user already owns are refused, so the
  * (account, position_id) / (batch_id, account) upserts can never touch

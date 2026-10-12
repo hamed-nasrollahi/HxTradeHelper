@@ -129,7 +129,7 @@ input double tradeRisk   = 1.0;              // Risk per trade (R)
 DialogHx  AppWindow;
 CButton  btnTabTrade, btnTabTest, btnTabJournal;
 CButton  btnJournal, btnJournalAll, btnJournalToday, btnYesterday, btnDayBefore, btnLastWeek, btnWeeklyMap, btnLevel1, btnLevel2, btnLevel3, btnSessions, btnATR, btnDOB,
-btnH4OB, btnH1OB, btnSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnExpApi, btnEnbl, btnReCalc, btnReset, btnLoadStrategy;
+btnH4OB, btnH1OB, btnSROB, btnTeDOB, btnTeH4OB, btnTeH1OB, btnTeSROB, btnMA200, btnMA60, btnMA20, btnBuy, btnSell, btnCLR, btnFib1, btnFib2, btnFib3, btnWB, btnLB, btnWS, btnLS, btnExp, btnExpApi, btnEnbl, btnReCalc, btnReset, btnLoadStrategy;
 CLabel   lblRepo;
 CComboBox cmbStrategy;          // dashboard strategies, filled when the Test tab opens
 bool     strategiesLoaded = false;
@@ -279,6 +279,12 @@ void PopulateTabs()
   cmbStrategy.ListViewItems(8);
   AppWindow.Add(cmbStrategy);
   CreateButton(btnLoadStrategy, "btnLoadStrategy", "Load", 10, 280, 100, 300);
+  // Same OB drawing as the Trade tab - a control can't live in two places,
+  // so these are separate buttons routed to the same click handlers
+  CreateButton(btnTeDOB, "btnTeDOB", "DOB",10,310,53,330);
+  CreateButton(btnTeH4OB, "btnTeH4OB", "H4OB",57,310,100,330);
+  CreateButton(btnTeH1OB, "btnTeH1OB", "H1OB",10,340,53,360);
+  CreateButton(btnTeSROB, "btnTeSROB", "SROB",57,340,100,360);
 
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,100,70);
@@ -343,6 +349,10 @@ void ApplyTabVisibility()
    ShowButton(btnExp, test);
    ShowButton(btnExpApi, test);
    ShowButton(btnLoadStrategy, test);
+   ShowButton(btnTeDOB, test);
+   ShowButton(btnTeH4OB, test);
+   ShowButton(btnTeH1OB, test);
+   ShowButton(btnTeSROB, test);
    // Show() also closes the drop-down, and this runs after every click
    // (including the one that opens it), so only act on a real change
    if(test != cmbStrategy.IsVisible())
@@ -1009,94 +1019,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       }
       else if(sparam == "btnExp")
       {
-         // Collect all trade fibo names
-         string tradeNames[];
-         int total = ObjectsTotal(0, 0, OBJ_FIBO);
-         for(int i = 0; i < total; i++)
-         {
-            string name = ObjectName(0, i, 0, OBJ_FIBO);
-            string pfx = StringSubstr(name, 0, 3);
-            if(pfx == "WB_" || pfx == "WS_" || pfx == "LB_" || pfx == "LS_")
-            {
-               int sz = ArraySize(tradeNames);
-               ArrayResize(tradeNames, sz + 1);
-               tradeNames[sz] = name;
-            }
-         }
-
-         // Sort by embedded datetime string (lexicographic = chronological)
-         int n = ArraySize(tradeNames);
-         for(int a = 0; a < n - 1; a++)
-            for(int b = a + 1; b < n; b++)
-               if(StringSubstr(tradeNames[a], 3) > StringSubstr(tradeNames[b], 3))
-               {
-                  string tmp = tradeNames[a];
-                  tradeNames[a] = tradeNames[b];
-                  tradeNames[b] = tmp;
-               }
-
-         // Write CSV
-         FolderCreate(JournalBasePath);
-         string fileName = JournalBasePath + "\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
-         int fh = FileOpen(fileName, FILE_WRITE | FILE_ANSI | FILE_CSV, ',');
-         if(fh == INVALID_HANDLE)
-         {
-            Print("btnExp: failed to open file ", fileName, "  error=", GetLastError());
-         }
-         else
-         {
-            FileWrite(fh, "Trade #", "Date", "Time", "Type", "Win/Lose", "Duration (min)", "Strategy", "correctTrade", "5m bias", "1h bias", "desc");
-            for(int i = 0; i < n; i++)
-            {
-               string pfx      = StringSubstr(tradeNames[i], 0, 3);
-               string dtStr    = StringSubstr(tradeNames[i], 3);          // "2024.01.15 14:30:00"
-               string datePart = StringSubstr(dtStr, 0, 10);              // "2024.01.15"
-               string timePart = StringSubstr(dtStr, 11);                 // "14:30:00"
-               string type     = (pfx == "WB_" || pfx == "LB_") ? "Buy"  : "Sell";
-               string result   = (pfx == "WB_" || pfx == "WS_") ? "Win"  : "Lose";
-               datetime t1     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 0);
-               datetime t2     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 1);
-               int durationMin = (int)(MathAbs((double)(t2 - t1)) / 60);
-               FileWrite(fh, i + 1, datePart, timePart, type, result, durationMin, "", "", "", "", "");
-            }
-            FileClose(fh);
-            Print("Trades exported to: ", TerminalInfoString(TERMINAL_DATA_PATH), "\\MQL5\\Files\\", fileName);
-
-            // Write JSON sidecar for the Python importer
-            string jsonFile = JournalBasePath + "\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".json";
-            int jh = FileOpen(jsonFile, FILE_WRITE | FILE_ANSI | FILE_TXT);
-            if(jh != INVALID_HANDLE)
-            {
-               string symbol = Symbol();
-               string json = "{\"symbol\":\"" + symbol + "\",\"trades\":[";
-               for(int i = 0; i < n; i++)
-               {
-                  string pfx2      = StringSubstr(tradeNames[i], 0, 3);
-                  string dtStr2    = StringSubstr(tradeNames[i], 3);
-                  string datePart2 = StringSubstr(dtStr2, 0, 10);
-                  string timePart2 = StringSubstr(dtStr2, 11);
-                  string type2     = (pfx2 == "WB_" || pfx2 == "LB_") ? "Buy"  : "Sell";
-                  string result2   = (pfx2 == "WB_" || pfx2 == "WS_") ? "Win"  : "Lose";
-                  datetime t1b     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 0);
-                  datetime t2b     = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 1);
-                  int dur2         = (int)(MathAbs((double)(t2b - t1b)) / 60);
-                  if(i > 0) json += ",";
-                  json += "{\"trade_number\":" + IntegerToString(i + 1)
-                        + ",\"trade_date\":\""  + datePart2 + "\""
-                        + ",\"trade_time\":\""  + timePart2 + "\""
-                        + ",\"type\":\""        + type2     + "\""
-                        + ",\"result\":\""      + result2   + "\""
-                        + ",\"duration_min\":"  + IntegerToString(dur2)
-                        + "}";
-               }
-               json += "]}";
-               FileWriteString(jh, json);
-               FileClose(jh);
-               Print("JSON sidecar written: ", jsonFile);
-            }
-
-            Alert("Export Complete: " + IntegerToString(n) + " trade(s) to MQL5\\Files\\" + fileName);
-         }
+         ExportBacktestCsv();
       }
       else if(sparam == "btnExpApi")
       {
@@ -1136,7 +1059,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          verticalSessionEnable = ! verticalSessionEnable;
          RefreshLines();
       }
-      else if(sparam == "btnDOB")
+      else if(sparam == "btnDOB" || sparam == "btnTeDOB")
       {
          long firstVisibleBar, visibleBars;
          ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
@@ -1149,7 +1072,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          double price_bottom = iLow(NULL, 0, middleBar);
          CreateRectangle("D-OB_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrPurple, time_start, price_top, time_end, price_bottom);
       }
-      else if(sparam == "btnH4OB")
+      else if(sparam == "btnH4OB" || sparam == "btnTeH4OB")
       {
          long firstVisibleBar, visibleBars;
          ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
@@ -1162,7 +1085,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          double price_bottom = iLow(NULL, 0, middleBar);
          CreateRectangle("H4-OB_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrDarkBlue, time_start, price_top, time_end, price_bottom);
       }
-      else if(sparam == "btnH1OB")
+      else if(sparam == "btnH1OB" || sparam == "btnTeH1OB")
       {
          long firstVisibleBar, visibleBars;
          ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
@@ -1175,7 +1098,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          double price_bottom = iLow(NULL, 0, middleBar);
          CreateRectangle("H1-OB_" + TimeToString(current_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS), true, clrDarkGreen, time_start, price_top, time_end, price_bottom);
       }
-      else if(sparam == "btnSROB")
+      else if(sparam == "btnSROB" || sparam == "btnTeSROB")
       {
          long firstVisibleBar, visibleBars;
          ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR, 0, firstVisibleBar);
@@ -1657,38 +1580,162 @@ void ExportTodaysTrades()
 }
 
 //+------------------------------------------------------------------+
-//| Upload the current Test-tab fibos without writing CSV/JSON files |
+//| One Test-tab trade fibo (WB_/WS_/LB_/LS_). Only the prefix of    |
+//| the name matters: the time in the name is when the button was    |
+//| pressed, not where the trade sits on the chart. The fibo's own   |
+//| anchors carry the trade: point 0 is the E level (entry, so its   |
+//| time is the trade time) and point 1 is the SL level.             |
 //+------------------------------------------------------------------+
-void ExportBacktestToApi()
+struct BacktestTrade
 {
-   string tradeNames[];
+   string   name;
+   string   type;       // Buy / Sell (from the prefix)
+   string   result;     // Win / Lose (from the prefix)
+   datetime entryTime;
+   double   entryPrice;
+   datetime slTime;
+   double   slPrice;
+   int      durationMin;
+};
+
+//+------------------------------------------------------------------+
+//| Minutes from entry until the bar that hit TP1 (win) or SL (lose) |
+//| TP1 is the fibo's 2 level, i.e. 1R past the entry. Returns -1    |
+//| when the chart has no bar data reaching that far.                |
+//+------------------------------------------------------------------+
+int BacktestDuration(const datetime entry, const double e, const double sl, const bool buy, const bool win)
+{
+   int start = iBarShift(NULL, 0, entry, false);
+   if(start < 0)
+      return -1;
+   double tp = e + (e - sl);
+   for(int shift = start; shift >= 0; shift--)
+   {
+      double hi = iHigh(NULL, 0, shift);
+      double lo = iLow(NULL, 0, shift);
+      bool hit = win ? (buy ? hi >= tp : lo <= tp)
+                     : (buy ? lo <= sl : hi >= sl);
+      if(hit)
+      {
+         // Exit is somewhere inside this bar - count it as the bar's close
+         datetime exitTime = iTime(NULL, 0, shift) + PeriodSeconds();
+         return (int)MathMax(0, (exitTime - entry) / 60);
+      }
+   }
+   return -1;
+}
+
+//+------------------------------------------------------------------+
+//| All Test-tab trade fibos, sorted by entry time                   |
+//+------------------------------------------------------------------+
+int CollectBacktestTrades(BacktestTrade &trades[])
+{
+   ArrayResize(trades, 0);
    int total = ObjectsTotal(0, 0, OBJ_FIBO);
    for(int i = 0; i < total; i++)
    {
       string name = ObjectName(0, i, 0, OBJ_FIBO);
       string pfx = StringSubstr(name, 0, 3);
-      if(pfx == "WB_" || pfx == "WS_" || pfx == "LB_" || pfx == "LS_")
+      if(pfx != "WB_" && pfx != "WS_" && pfx != "LB_" && pfx != "LS_")
+         continue;
+      BacktestTrade t;
+      bool buy      = (pfx == "WB_" || pfx == "LB_");
+      bool win      = (pfx == "WB_" || pfx == "WS_");
+      t.name        = name;
+      t.type        = buy ? "Buy" : "Sell";
+      t.result      = win ? "Win" : "Lose";
+      t.entryTime   = (datetime)ObjectGetInteger(0, name, OBJPROP_TIME, 0);
+      t.entryPrice  = ObjectGetDouble(0, name, OBJPROP_PRICE, 0);
+      t.slTime      = (datetime)ObjectGetInteger(0, name, OBJPROP_TIME, 1);
+      t.slPrice     = ObjectGetDouble(0, name, OBJPROP_PRICE, 1);
+      t.durationMin = BacktestDuration(t.entryTime, t.entryPrice, t.slPrice, buy, win);
+      if(t.durationMin < 0)
       {
-         int sz = ArraySize(tradeNames);
-         ArrayResize(tradeNames, sz + 1);
-         tradeNames[sz] = name;
+         Print("Backtest: no chart bars reach the exit of ", name, " - duration set to 0");
+         t.durationMin = 0;
       }
+      int sz = ArraySize(trades);
+      ArrayResize(trades, sz + 1);
+      trades[sz] = t;
    }
 
-   int n = ArraySize(tradeNames);
+   int n = ArraySize(trades);
+   for(int a = 0; a < n - 1; a++)
+      for(int b = a + 1; b < n; b++)
+         if(trades[a].entryTime > trades[b].entryTime)
+         {
+            BacktestTrade tmp = trades[a];
+            trades[a] = trades[b];
+            trades[b] = tmp;
+         }
+   return n;
+}
+
+//+------------------------------------------------------------------+
+//| Write the Test-tab fibos to CSV + JSON under MQL5\Files          |
+//+------------------------------------------------------------------+
+void ExportBacktestCsv()
+{
+   BacktestTrade trades[];
+   int n = CollectBacktestTrades(trades);
+
+   FolderCreate(JournalBasePath);
+   string fileName = JournalBasePath + "\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
+   int fh = FileOpen(fileName, FILE_WRITE | FILE_ANSI | FILE_CSV, ',');
+   if(fh == INVALID_HANDLE)
+   {
+      Print("btnExp: failed to open file ", fileName, "  error=", GetLastError());
+      return;
+   }
+   FileWrite(fh, "Trade #", "Date", "Time", "Type", "Win/Lose", "Duration (min)", "Strategy", "correctTrade", "5m bias", "1h bias", "desc");
+   for(int i = 0; i < n; i++)
+   {
+      string dtStr = TimeToString(trades[i].entryTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS); // "2024.01.15 14:30:00"
+      FileWrite(fh, i + 1, StringSubstr(dtStr, 0, 10), StringSubstr(dtStr, 11), trades[i].type, trades[i].result,
+                trades[i].durationMin, "", "", "", "", "");
+   }
+   FileClose(fh);
+   Print("Trades exported to: ", TerminalInfoString(TERMINAL_DATA_PATH), "\\MQL5\\Files\\", fileName);
+
+   // Write JSON sidecar for the Python importer
+   string jsonFile = JournalBasePath + "\\backTest_" + TimeToString(TimeCurrent(), TIME_DATE) + ".json";
+   int jh = FileOpen(jsonFile, FILE_WRITE | FILE_ANSI | FILE_TXT);
+   if(jh != INVALID_HANDLE)
+   {
+      string json = "{\"symbol\":\"" + Symbol() + "\",\"trades\":[";
+      for(int i = 0; i < n; i++)
+      {
+         string dtStr = TimeToString(trades[i].entryTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS);
+         if(i > 0) json += ",";
+         json += "{\"trade_number\":" + IntegerToString(i + 1)
+               + ",\"trade_date\":\""  + StringSubstr(dtStr, 0, 10) + "\""
+               + ",\"trade_time\":\""  + StringSubstr(dtStr, 11) + "\""
+               + ",\"type\":\""        + trades[i].type   + "\""
+               + ",\"result\":\""      + trades[i].result + "\""
+               + ",\"duration_min\":"  + IntegerToString(trades[i].durationMin)
+               + "}";
+      }
+      json += "]}";
+      FileWriteString(jh, json);
+      FileClose(jh);
+      Print("JSON sidecar written: ", jsonFile);
+   }
+
+   Alert("Export Complete: " + IntegerToString(n) + " trade(s) to MQL5\\Files\\" + fileName);
+}
+
+//+------------------------------------------------------------------+
+//| Upload the current Test-tab fibos without writing CSV/JSON files |
+//+------------------------------------------------------------------+
+void ExportBacktestToApi()
+{
+   BacktestTrade trades[];
+   int n = CollectBacktestTrades(trades);
    if(n == 0)
    {
       Alert("Backtest API export: no test trades found.");
       return;
    }
-   for(int a = 0; a < n - 1; a++)
-      for(int b = a + 1; b < n; b++)
-         if(StringSubstr(tradeNames[a], 3) > StringSubstr(tradeNames[b], 3))
-         {
-            string tmp = tradeNames[a];
-            tradeNames[a] = tradeNames[b];
-            tradeNames[b] = tmp;
-         }
 
    string accountId = StringFormat("%I64d", AccountInfoInteger(ACCOUNT_LOGIN));
    string batchId = accountId + "-"
@@ -1701,25 +1748,17 @@ void ExportBacktestToApi()
                + ",\"symbol\":\"" + Symbol() + "\",\"trades\":[";
    for(int i = 0; i < n; i++)
    {
-      string pfx = StringSubstr(tradeNames[i], 0, 3);
-      string dt = StringSubstr(tradeNames[i], 3);
-      string type = (pfx == "WB_" || pfx == "LB_") ? "Buy" : "Sell";
-      string result = (pfx == "WB_" || pfx == "WS_") ? "Win" : "Lose";
-      datetime t1 = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 0);
-      datetime t2 = (datetime)ObjectGetInteger(0, tradeNames[i], OBJPROP_TIME, 1);
-      int duration = (int)(MathAbs((double)(t2 - t1)) / 60);
-      double p1 = ObjectGetDouble(0, tradeNames[i], OBJPROP_PRICE, 0);
-      double p2 = ObjectGetDouble(0, tradeNames[i], OBJPROP_PRICE, 1);
+      string entry = TimeToString(trades[i].entryTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS);
       if(i > 0) json += ",";
       // time1/price1/time2/price2 let LoadStrategyTrades() redraw the fibo
       json += "{\"trade_number\":" + IntegerToString(i + 1)
-           + ",\"trade_time\":\"" + dt + "\",\"type\":\"" + type
-           + "\",\"result\":\"" + result + "\",\"duration_min\":"
-           + IntegerToString(duration)
-           + ",\"time1\":\"" + TimeToString(t1, TIME_DATE | TIME_MINUTES | TIME_SECONDS)
-           + "\",\"price1\":" + DoubleToString(p1, _Digits)
-           + ",\"time2\":\"" + TimeToString(t2, TIME_DATE | TIME_MINUTES | TIME_SECONDS)
-           + "\",\"price2\":" + DoubleToString(p2, _Digits) + "}";
+           + ",\"trade_time\":\"" + entry + "\",\"type\":\"" + trades[i].type
+           + "\",\"result\":\"" + trades[i].result + "\",\"duration_min\":"
+           + IntegerToString(trades[i].durationMin)
+           + ",\"time1\":\"" + entry
+           + "\",\"price1\":" + DoubleToString(trades[i].entryPrice, _Digits)
+           + ",\"time2\":\"" + TimeToString(trades[i].slTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS)
+           + "\",\"price2\":" + DoubleToString(trades[i].slPrice, _Digits) + "}";
    }
    json += "]}";
 
@@ -1851,7 +1890,10 @@ void LoadStrategyTrades()
       bool buy = (JsonField(obj, "type") == "Buy");
       // Same name format the W-B/L-B/W-S/L-S buttons use, so Stats, Export
       // and Export API treat loaded trades like hand-placed ones
+      // Two trades can share an entry bar, so keep the name unique
       string name = (win ? "W" : "L") + (buy ? "B_" : "S_") + JsonField(obj, "trade_time");
+      for(int k = 2; ObjectFind(0, name) >= 0; k++)
+         name = (win ? "W" : "L") + (buy ? "B_" : "S_") + JsonField(obj, "trade_time") + "#" + IntegerToString(k);
       CreateFibo(name, true, win ? clrDarkGreen : clrMaroon,
                  StringToTime(JsonField(obj, "time1")), StringToDouble(JsonField(obj, "price1")),
                  StringToTime(JsonField(obj, "time2")), StringToDouble(JsonField(obj, "price2")));

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ownsRow, query } from "@/lib/db";
+import { deleteBacktest, ownsRow, query } from "@/lib/db";
 import { errorResponse, HttpError, requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -17,5 +17,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return errorResponse(e, "update failed");
+  }
+}
+
+/** Deletes the batch and every trade (and note link) it uploaded. */
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const user = await requireUser(req);
+    if (!(await deleteBacktest(Number(params.id), user.id))) throw new HttpError(404, "backtest not found");
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return errorResponse(e, "delete failed");
   }
 }
