@@ -81,6 +81,8 @@ input int Width_LastWeek = 1;            // Line width
 input double Level1 = 1.25;
 input double Level2 = 2.50;
 input double Level3 = 5.00;
+input bool   Level_AsZone = false;   // L1/L2/L3: draw a zone (2 lines at level +/- zone size) instead of a single line
+input double Level_ZoneSize = 1.0;   // Zone half-width in price units (e.g. 1 => 4199 & 4201 around 4200)
 
 input bool UsePips = true;
 
@@ -2767,7 +2769,17 @@ void GenerateRoundNumbers(double start, double end, double step)
          }
          datetime startTime = iTime(Symbol(), PERIOD_D1, 0);
          datetime endTime = iTime(Symbol(), PERIOD_D1, 0) + 86400;
-         DrawLimitLine(name, current, startTime, current, endTime, clr, style, width); // Last week's 25% line for this week
+         if(Level_AsZone && Level_ZoneSize > 0)
+         {
+            double upper = current + Level_ZoneSize;
+            double lower = current - Level_ZoneSize;
+            DrawLimitLine(name + "_Up", upper, startTime, upper, endTime, clr, style, width);
+            DrawLimitLine(name + "_Dn", lower, startTime, lower, endTime, clr, style, width);
+         }
+         else
+         {
+            DrawLimitLine(name, current, startTime, current, endTime, clr, style, width);
+         }
       }
    }
 }  
