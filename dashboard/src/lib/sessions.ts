@@ -44,3 +44,9 @@ export function sessionOf(time: string): { key: string; label: string } {
   const end = SESSIONS[(idx + 1) % SESSIONS.length].start;
   return { key: s.start, label: `${s.name} ${s.start}–${end}` };
 }
+
+/** Every sub-session in chart-time order, as `sessionOf` keys/labels them. */
+export const SESSION_OPTIONS: { key: string; label: string }[] = SESSIONS.map((s, i) => ({
+  key: s.start,
+  label: `${s.name} ${s.start}–${SESSIONS[(i + 1) % SESSIONS.length].start}`,
+}));
