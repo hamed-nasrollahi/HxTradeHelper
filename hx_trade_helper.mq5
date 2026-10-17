@@ -17,6 +17,8 @@
 #include <Controls\Button.mqh>
 #include <Controls\Label.mqh>
 #include <Controls\ComboBox.mqh>
+#include <Controls\Edit.mqh>
+#include <Controls\CheckBox.mqh>
 #include <Arrays\ArrayObj.mqh> // For dynamic object arrays
 #include "TradeElement.mqh"
 
@@ -135,6 +137,13 @@ btnH4OB, btnH1OB, btnSROB, btnTeDOB, btnTeH4OB, btnTeH1OB, btnTeSROB, btnMA200, 
 CLabel   lblRepo;
 CComboBox cmbStrategy;          // dashboard strategies, filled when the Test tab opens
 bool     strategiesLoaded = false;
+// Backtest lines: when checked, the Trade tab line toggles (Yesterday, Day
+// Before, Last Week, Week Map, L1-L3, ATR, Sessions) also draw for each of
+// the previous edtBtDays days
+CEdit     edtBtDays;
+CCheckBox chkBtLines;
+bool      btLinesEnable = false;
+int       btLinesDays   = 100;
 
 bool verticalSessionEnable = false, level3Enable = false, level2Enable = false, level1Enable = false, lastWeekEnable = false, dayBeforeEnable = false, 
 yesterdayEnable = false, atrEnable = true, lastWeekMapEnable = false;
@@ -287,6 +296,15 @@ void PopulateTabs()
   CreateButton(btnTeH4OB, "btnTeH4OB", "H4OB",57,310,100,330);
   CreateButton(btnTeH1OB, "btnTeH1OB", "H1OB",10,340,53,360);
   CreateButton(btnTeSROB, "btnTeSROB", "SROB",57,340,100,360);
+  edtBtDays.Create(0, "edtBtDays", 0, 10, 370, 100, 390);
+  edtBtDays.Text(IntegerToString(btLinesDays));
+  edtBtDays.TextAlign(ALIGN_CENTER);
+  AppWindow.Add(edtBtDays);
+  ObjectSetString(0, "edtBtDays", OBJPROP_TOOLTIP, "Backtest lines: number of previous days");
+  chkBtLines.Create(0, "chkBtLines", 0, 10, 395, 100, 415);
+  chkBtLines.Text("BT Lines");
+  chkBtLines.Checked(btLinesEnable);
+  AppWindow.Add(chkBtLines);
 
   // Journal tab
   CreateButton(btnJournal, "btnJournal", "Export Journal",10,40,100,70);
@@ -363,6 +381,19 @@ void ApplyTabVisibility()
          cmbStrategy.Show();
       else
          cmbStrategy.Hide();
+   }
+   if(test != edtBtDays.IsVisible())
+   {
+      if(test)
+      {
+         edtBtDays.Show();
+         chkBtLines.Show();
+      }
+      else
+      {
+         edtBtDays.Hide();
+         chkBtLines.Hide();
+      }
    }
 
    // Journal tab
@@ -1259,7 +1290,22 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       }
    }
     
+   else if(id == CHARTEVENT_OBJECT_ENDEDIT && sparam == "edtBtDays")
+   {
+      int days = (int)StringToInteger(ObjectGetString(0, "edtBtDays", OBJPROP_TEXT));
+      btLinesDays = MathMax(1, MathMin(days, 2000));
+      ObjectSetString(0, "edtBtDays", OBJPROP_TEXT, IntegerToString(btLinesDays));
+      if(btLinesEnable)
+         RefreshLines();
+   }
+
    AppWindow.ChartEvent(id,lparam,dparam,sparam);
+   // The checkbox toggles itself inside AppWindow.ChartEvent
+   if(chkBtLines.Checked() != btLinesEnable)
+   {
+      btLinesEnable = chkBtLines.Checked();
+      RefreshLines();
+   }
    // Restoring the dialog shows every control and clicking a locking tab
    // button toggles its pressed state, so re-apply the active tab afterwards
    if(id == CHARTEVENT_OBJECT_CLICK && !AppWindow.IsMinimized())
@@ -2733,15 +2779,18 @@ void GenerateLevelNumbers()
 //+------------------------------------------------------------------+
 //| Function to generate numbers with specified step                 |
 //+------------------------------------------------------------------+
-void GenerateRoundNumbers(double start, double end, double step)
+// dayStart/suffix let the backtest lines draw the same levels for past days
+void GenerateRoundNumbers(double start, double end, double step, datetime dayStart = 0, string suffix = "")
 {
+   if(dayStart == 0)
+      dayStart = iTime(Symbol(), PERIOD_D1, 0);
    double firstRound = start - step - fmod(start, step);
    double endRound = end + step - fmod(end, step);
    if (fmod(start, step) == 0) firstRound = start;
    for (double current = firstRound; current <= endRound; current += step)
    {
       
-      string name = "StepLine_" + DoubleToString(current);
+      string name = "StepLine_" + DoubleToString(current) + suffix;
       if (ObjectFind(0, name) < 0)
       {
          color clr;
@@ -2767,8 +2816,8 @@ void GenerateRoundNumbers(double start, double end, double step)
             style = Style_Level3;
             width = Width_Level3;
          }
-         datetime startTime = iTime(Symbol(), PERIOD_D1, 0);
-         datetime endTime = iTime(Symbol(), PERIOD_D1, 0) + 86400;
+         datetime startTime = dayStart;
+         datetime endTime = dayStart + 86400;
          if(Level_AsZone && Level_ZoneSize > 0)
          {
             double upper = current + Level_ZoneSize;
@@ -2861,21 +2910,124 @@ void UpdateLines()
    }
    
    if(verticalSessionEnable)
+      DrawDaySessions(0, "");
+
+   if(btLinesEnable)
+      DrawBacktestLines(btLinesDays);
+}
+
+//+------------------------------------------------------------------+
+//| Vertical session lines for one day (day 0 = today)               |
+//+------------------------------------------------------------------+
+void DrawDaySessions(datetime day, string suffix)
+{
+   if(ShowTokyoSession) DrawverticalSessionLines("Vertical_Tokyo" + suffix, 1, 0, 6, 0, Color_TokyoSession, Style_Session, Width_Session, day);
+   if(ShowLondonSession) DrawverticalSessionLines("Vertical_London" + suffix, 7, 0, 15, 30, Color_LondonSession, Style_Session, Width_Session, day);
+   // runs until the NY open line
+   if(ShowNewYorkPreSession) DrawverticalSessionLine("Vertical_NewYorkPre" + suffix, 12, 0, Color_NewYorkPreSession, Style_Session, Width_Session, day);
+   if(ShowNewYorkSession) DrawverticalSessionLines("Vertical_NewYork" + suffix, 13, 30, 20, 0, Color_NewYorkSession, Style_Session, Width_Session, day);
+   if(ShowExtraSessionLines)
    {
-      if(ShowTokyoSession) DrawverticalSessionLines("Vertical_Tokyo", 1, 0, 6, 0, Color_TokyoSession, Style_Session, Width_Session);
-      if(ShowLondonSession) DrawverticalSessionLines("Vertical_London", 7, 0, 15, 30, Color_LondonSession, Style_Session, Width_Session);
-      // runs until the NY open line
-      if(ShowNewYorkPreSession) DrawverticalSessionLine("Vertical_NewYorkPre", 12, 0, Color_NewYorkPreSession, Style_Session, Width_Session);
-      if(ShowNewYorkSession) DrawverticalSessionLines("Vertical_NewYork", 13, 30, 20, 0, Color_NewYorkSession, Style_Session, Width_Session);
-      if(ShowExtraSessionLines)
+      // GMT times, same basis as NY open (13:30 GMT -> 16:30 on chart with SummerTime)
+      // 11:00 / 13:00 chart = 1h / 3h after London open
+      // chart:          2:30 3:00 7:00 8:00 8:30 11:00 13:00 18:00 20:00 20:30 21:00
+      int extraHour[] = {  -1,   0,   4,   5,   5,    8,   10,   15,   17,   17,   18};
+      int extraMin[]  = {  30,   0,   0,   0,  30,    0,    0,    0,    0,   30,    0};
+      for(int i = 0; i < ArraySize(extraHour); i++)
+         DrawverticalSessionLine("Vertical_Extra_" + IntegerToString(i) + suffix, extraHour[i], extraMin[i], Color_ExtraSessionLines, Style_Session, Width_Session, day);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Backtest lines: repeat the enabled lines for each of the         |
+//| previous `days` daily bars. Every day is calculated on its own,  |
+//| from the bars before it, exactly as the live lines were that day |
+//+------------------------------------------------------------------+
+void DrawBacktestLines(int days)
+{
+   // every day needs the ATR window and the two bars before it
+   days = MathMin(days, iBars(Symbol(), PERIOD_D1) - ATR_Period - 3);
+   if(days < 1)
+      return;
+
+   for(int d = 1; d <= days; d++)
+   {
+      datetime dayStart = iTime(Symbol(), PERIOD_D1, d);
+      if(dayStart == 0)
+         break;
+      datetime dayEnd = dayStart + 86400;
+      string suffix = "_H" + IntegerToString(d);
+
+      // that day's "yesterday" is the bar before it
+      double prevClose = iClose(Symbol(), PERIOD_D1, d + 1);
+
+      if(atrEnable)
       {
-         // GMT times, same basis as NY open (13:30 GMT -> 16:30 on chart with SummerTime)
-         // 11:00 / 13:00 chart = 1h / 3h after London open
-         // chart:          2:30 3:00 7:00 8:00 8:30 11:00 13:00 18:00 20:00 20:30 21:00
-         int extraHour[] = {  -1,   0,   4,   5,   5,    8,   10,   15,   17,   17,   18};
-         int extraMin[]  = {  30,   0,   0,   0,  30,    0,    0,    0,    0,   30,    0};
-         for(int i = 0; i < ArraySize(extraHour); i++)
-            DrawverticalSessionLine("Vertical_Extra_" + IntegerToString(i), extraHour[i], extraMin[i], Color_ExtraSessionLines, Style_Session, Width_Session);
+         double atr = CalculateATR(ATR_Period, d);
+         DrawLimitLine("ATRTOP" + suffix, prevClose + atr, dayStart, prevClose + atr, dayEnd, ATR_Color, ATR_Style, 1);
+         DrawLimitLine("ATRLow" + suffix, prevClose - atr, dayStart, prevClose - atr, dayEnd, ATR_Color, ATR_Style, 1);
+      }
+      if(yesterdayEnable)
+      {
+         double prevOpen = iOpen(Symbol(), PERIOD_D1, d + 1);
+         double prevHigh = iHigh(Symbol(), PERIOD_D1, d + 1);
+         double prevLow  = iLow(Symbol(), PERIOD_D1, d + 1);
+         DrawLimitLine("YesterdayClose" + suffix, prevClose, dayStart, prevClose, dayEnd, Color_Yesterday, Style_Yesterday, Width_Yesterday);
+         DrawLimitLine("YesterdayOpen" + suffix, prevOpen, dayStart, prevOpen, dayEnd, Color_YesterdayOpen, Style_Yesterday, Width_Yesterday);
+         DrawLimitLine("YesterdayHigh" + suffix, prevHigh, dayStart, prevHigh, dayEnd, Color_YesterdayHigh, Style_Yesterday, Width_Yesterday);
+         DrawLimitLine("YesterdayLow" + suffix, prevLow, dayStart, prevLow, dayEnd, Color_YesterdayLow, Style_Yesterday, Width_Yesterday);
+      }
+      if(dayBeforeEnable)
+      {
+         // same two-day span as the live line: from the previous day to the end of this one
+         double dayBeforeClose = iClose(Symbol(), PERIOD_D1, d + 2);
+         datetime prevStart = iTime(Symbol(), PERIOD_D1, d + 1);
+         DrawLimitLine("DayBeforeYesterdayClose" + suffix, dayBeforeClose, prevStart, dayBeforeClose, dayEnd, Color_DayBefore, Style_DayBefore, Width_DayBefore);
+      }
+      if(level1Enable || level2Enable || level3Enable)
+      {
+         // levels covering that day's own range
+         double dayHigh = iHigh(Symbol(), PERIOD_D1, d);
+         double dayLow  = iLow(Symbol(), PERIOD_D1, d);
+         if(level1Enable) GenerateRoundNumbers(dayLow, dayHigh, Level1, dayStart, suffix);
+         if(level2Enable) GenerateRoundNumbers(dayLow, dayHigh, Level2, dayStart, suffix);
+         if(level3Enable) GenerateRoundNumbers(dayLow, dayHigh, Level3, dayStart, suffix);
+      }
+      if(verticalSessionEnable)
+         DrawDaySessions(dayStart, suffix);
+   }
+
+   // Week lines: each past week gets its own previous week's close / map,
+   // spanning that whole week (the current week is drawn by UpdateLines)
+   if(lastWeekEnable || lastWeekMapEnable)
+   {
+      datetime oldestDay = iTime(Symbol(), PERIOD_D1, days);
+      for(int w = 1; ; w++)
+      {
+         datetime weekStart = iTime(Symbol(), PERIOD_W1, w);
+         if(weekStart == 0 || weekStart + 7 * 86400 <= oldestDay || iTime(Symbol(), PERIOD_W1, w + 1) == 0)
+            break;
+         datetime weekEnd = iTime(Symbol(), PERIOD_W1, w - 1);
+         string suffix = "_HW" + IntegerToString(w);
+
+         if(lastWeekEnable)
+         {
+            double weekClose = iClose(Symbol(), PERIOD_W1, w + 1);
+            DrawLimitLine("LastWeekClose" + suffix, weekClose, weekStart, weekClose, weekEnd, Color_LastWeek, Style_LastWeek, Width_LastWeek);
+         }
+         if(lastWeekMapEnable)
+         {
+            double weekHigh = iHigh(Symbol(), PERIOD_W1, w + 1);
+            double weekLow  = iLow(Symbol(), PERIOD_W1, w + 1);
+            double p25 = weekLow + (weekHigh - weekLow) * 0.25;
+            double p50 = weekLow + (weekHigh - weekLow) * 0.50;
+            double p75 = weekLow + (weekHigh - weekLow) * 0.75;
+            DrawLimitLine("LastWeekHigh" + suffix, weekHigh, weekStart, weekHigh, weekEnd, Color_HighLow, Style_HighLow, Width_HighLow);
+            DrawLimitLine("LastWeekLow" + suffix, weekLow, weekStart, weekLow, weekEnd, Color_HighLow, Style_HighLow, Width_HighLow);
+            DrawLimitLine("25Percent" + suffix, p25, weekStart, p25, weekEnd, Color_MidLevels, Style_MidLevels, Width_MidLevels);
+            DrawLimitLine("50Percent" + suffix, p50, weekStart, p50, weekEnd, Color_MidLevels, Style_MidLevels, Width_MidLevels);
+            DrawLimitLine("75Percent" + suffix, p75, weekStart, p75, weekEnd, Color_MidLevels, Style_MidLevels, Width_MidLevels);
+         }
       }
    }
 }
@@ -2884,12 +3036,12 @@ void UpdateLines()
 //+------------------------------------------------------------------+
 //| Custom ATR calculation function                                  |
 //+------------------------------------------------------------------+
-double CalculateATR(int period)
+double CalculateATR(int period, int shift = 0)
 {
    double sumTR = 0.0;
 
    // Calculate TR for each bar in the period
-   for (int i = 0; i < period; i++)
+   for (int i = shift; i < shift + period; i++)
    {
       sumTR += CalculateTrueRange(i);
    }
@@ -2931,10 +3083,10 @@ void DrawLimitLine(string lineName, double startPrice, datetime startTime, doubl
    ObjectSetInteger(0, name, OBJPROP_BACK, true);
 }
 
-void DrawverticalSessionLines(string sessionName, int sessionStartGMT_Hour, int sessionStartGMT_Min, int sessionEndGMT_Hour, int sessionEndGMT_Min, color clr, ENUM_LINE_STYLE style, int width)
+void DrawverticalSessionLines(string sessionName, int sessionStartGMT_Hour, int sessionStartGMT_Min, int sessionEndGMT_Hour, int sessionEndGMT_Min, color clr, ENUM_LINE_STYLE style, int width, datetime day = 0)
 {
-   
-   datetime currentDate = TimeCurrent();
+
+   datetime currentDate = (day == 0) ? TimeCurrent() : day;
    // Create datetime values for the GMT times
    datetime gmtOpen = StringToTime(TimeToString(currentDate, TIME_DATE) + " " + IntegerToString(sessionStartGMT_Hour) + ":" + IntegerToString(sessionStartGMT_Min));
    datetime gmtClose = StringToTime(TimeToString(currentDate, TIME_DATE) + " " + IntegerToString(sessionEndGMT_Hour) + ":" + IntegerToString(sessionEndGMT_Min));
@@ -2953,9 +3105,9 @@ void DrawverticalSessionLines(string sessionName, int sessionStartGMT_Hour, int 
 }
 
 // Single line at a GMT time, converted the same way as DrawverticalSessionLines (hour may be -1 for previous day)
-void DrawverticalSessionLine(string name, int gmtHour, int gmtMin, color clr, ENUM_LINE_STYLE style, int width)
+void DrawverticalSessionLine(string name, int gmtHour, int gmtMin, color clr, ENUM_LINE_STYLE style, int width, datetime day = 0)
 {
-   datetime currentDate = TimeCurrent();
+   datetime currentDate = (day == 0) ? TimeCurrent() : day;
    int dayShift = 0;
    if(gmtHour < 0)
      {
